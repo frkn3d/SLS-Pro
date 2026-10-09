@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SLS Pro</title>
+  <meta name="description" content="SLS Pro — Natural hazard simulation platform">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0f14'/%3E%3Cpath d='M5 25 13 10l4 6 3-4 7 13z' fill='%235cc8ff'/%3E%3Cpath d='M13 10l-2.2 4.2 2.2 1.2 2.1-1.4z' fill='%23dff3ff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" id="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#131a22" stroke="#2d3d50"/>
+        <path d="M5 25 13 10l4 6 3-4 7 13z" fill="#5cc8ff"/>
+        <path d="M13 10l-2.2 4.2 2.2 1.2 2.1-1.4z" fill="#dff3ff"/>
+      </svg>
+      <span class="brand-name">SLS <b>Pro</b></span>
+      <span class="brand-tag" data-i18n="app.tagline"></span>
+    </a>
+    <div id="crumb" class="crumb"></div>
+    <span class="spacer"></span>
+    <button class="ver" id="verBtn" type="button" data-i18n-title="notes.open"></button>
+    <button class="chip" id="lang" type="button" aria-label="Language"><span data-i18n="lang.switch"></span></button>
+  </header>
+
+  <main id="app"></main>
+
+  <!-- Açık kaynak bağımlılıklar: MapLibre GL (BSD-3), proj4js (MIT), geotiff.js (MIT) -->
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.12.1/dist/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/release-notes.js"></script>
+  <script src="js/core/projection.js"></script>
+  <script src="js/core/terrain.js"></script>
+  <script src="js/core/sources.js"></script>
+  <script src="js/ui/map.js"></script>
+  <script src="js/modules/avalanche.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Yalnızca SLS Pro'nun çalışması için gereken dosyalar depoya girer.
+/*
+!/.gitignore
+!/.gitattributes
+!/index.html
+!/serve.py
+!/Baslat.bat
+!/README.md
+!/CHANGELOG.md
+!/css/
+!/js/
+__pycache__/

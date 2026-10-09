@@ -405,3 +405,8 @@ button.step:disabled { cursor: default; opacity: .6; }
 .tl-chart { display: block; margin-top: 8px; border-radius: 6px; cursor: pointer; }
 .tl-opts { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; margin-top: 8px; }
 .tl-opts .seg button { height: 30px; font-size: 12px; }
+
+/* ---------- 0.6.0 ---------- */
+.grad { height: 10px; border-radius: 3px; margin: 2px 0 4px; min-width: 150px; }
+.grad-ticks { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-2); }
+.proj-list li .btn { height: 30px; }

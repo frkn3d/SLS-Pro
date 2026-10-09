@@ -1,7 +1,9 @@
 /* SLS Pro — Voellmy-Salm yoğun çığ akış çözücüsü (+ kar sürüklenmesi, + deneysel toz bulutu)
  *
- * YOĞUN AKIŞ: derinlik-ortalamalı sığ akış denklemleri, yatay izdüşüm ızgarasında
- * birinci derece sonlu hacim (HLL akısı).
+ * YOĞUN AKIŞ: derinlik-ortalamalı sığ akış denklemleri, yatay izdüşüm ızgarasında sonlu hacim.
+ * Varsayılan ikinci derece: MUSCL yüz kestirimi (MC sınırlayıcı) + HLL akısı + Heun (SSP-RK2);
+ * sürtünme, sürüklenme ve bulut kaynağı adım başına bir kez (ayrıştırma) uygulanır.
+ * clipped: negatif yükseklik kırpmasıyla eklenen kütle (dengeye + yönde girer).
  *
  *   ∂h/∂t  + ∇·(h u)                   = ė_entrain − ė_powder
  *   ∂hu/∂t + ∇·(h u⊗u + ½ g cosθ h² I) = −g cos²θ h ∇z − S_f
@@ -41,6 +43,7 @@
     tMax: 300,           // en uzun simülasyon süresi (s)
     stopRatio: 0.05,     // momentum maksimumun bu oranına düşünce dur (RAMMS ölçütü)
     cfl: 0.45,
+    order: 2,            // sayısal yöntem: 1 = birinci derece (HLL), 2 = MUSCL-MC + Heun (SSP-RK2)
     minFlowH: 0.05,      // hız/basınç maksimumlarının kaydedileceği en küçük akış yüksekliği (m)
     // Kar sürüklenmesi (erodible haritası verilirse etkin)
     kappaE: 0.02,        // sürüklenme katsayısı (–)
@@ -159,12 +162,26 @@
       ft = (sR * FtL - sL * FtR + sL * sR * (hR * utR - hL * utL)) * inv;
     }
 
-    // Bir katman için tüm yüzey akıları (bölge: ra..rb, ca..cb). out(edge, fh, fm) kenar çıkışı bildirir.
-    function fluxes(L, gArr, ra, rb, ca, cb, out) {
+    // MC sınırlayıcı (monotonized central): ikinci derece eğimler, TVD ve pozitiflik korunur
+    function mc(a, b, c) {
+      const d1 = b - a, d2 = c - b;
+      if (d1 * d2 <= 0) return 0;
+      const s = d1 > 0 ? 1 : -1;
+      return s * Math.min(2 * Math.abs(d1), 0.5 * Math.abs(c - a), 2 * Math.abs(d2));
+    }
+
+    /**
+     * Bir katman için tüm yüzey akıları (bölge: ra..rb, ca..cb).
+     * order 2: yüz değerleri MUSCL (MC sınırlayıcı) ile kestirilir. out(edge, fh, fm) kenar çıkışı bildirir.
+     */
+    function fluxes(L, gArr, ra, rb, ca, cb, out, order) {
       const h = L.h, hu = L.hu, hv = L.hv, dh = L.dh, dhu = L.dhu, dhv = L.dhv, m = L.m, dm = L.dm;
+      const second = order === 2;
       for (let r = ra; r <= rb; r++) {
         for (let c = ca; c <= cb; c++) { const i = r * W + c; dh[i] = 0; dhu[i] = 0; dhv[i] = 0; if (dm) dm[i] = 0; }
       }
+      const velA = (j) => (h[j] < EPS ? 0 : hu[j] / h[j]);
+      const velB = (j) => (h[j] < EPS ? 0 : hv[j] / h[j]);
       for (let pass = 0; pass < 2; pass++) {
         const xDir = pass === 0;
         const rFrom = xDir ? ra : ra - 1, cFrom = xDir ? ca - 1 : ca;
@@ -176,15 +193,27 @@
             if (iL < 0 && iR < 0) continue;
             const jL = iL >= 0 ? iL : iR, jR = iR >= 0 ? iR : iL;
             if (wall[jL] || wall[jR]) continue;
-            const hL = h[jL], hR = h[jR];
+            let hL = h[jL], hR = h[jR];
             if (hL < EPS && hR < EPS) continue;
-            const aL = hL < EPS ? 0 : hu[jL] / hL, bL = hL < EPS ? 0 : hv[jL] / hL;
-            const aR = hR < EPS ? 0 : hu[jR] / hR, bR = hR < EPS ? 0 : hv[jR] / hR;
+            let aL = velA(jL), bL = velB(jL), aR = velA(jR), bR = velB(jR);
+            if (second && iL >= 0 && iR >= 0) {
+              let jLL, jRR;
+              if (xDir) { jLL = c - 1 >= 0 ? r * W + c - 1 : jL; jRR = c + 2 < W ? r * W + c + 2 : jR; }
+              else { jLL = r - 1 >= 0 ? (r - 1) * W + c : jL; jRR = r + 2 < H ? (r + 2) * W + c : jR; }
+              if (wall[jLL]) jLL = jL;
+              if (wall[jRR]) jRR = jR;
+              const cAL = aL, cBL = bL, cAR = aR, cBR = bR;   // hücre ortalamaları
+              const hl = hL + 0.5 * mc(h[jLL], hL, hR), hr = hR - 0.5 * mc(hL, hR, h[jRR]);
+              if (hl >= EPS) { aL = cAL + 0.5 * mc(velA(jLL), cAL, cAR); bL = cBL + 0.5 * mc(velB(jLL), cBL, cBR); } else { aL = 0; bL = 0; }
+              if (hr >= EPS) { aR = cAR - 0.5 * mc(cAL, cAR, velA(jRR)); bR = cBR - 0.5 * mc(cBL, cBR, velB(jRR)); } else { aR = 0; bR = 0; }
+              hL = hl; hR = hr;
+              if (hL < EPS && hR < EPS) continue;
+            }
             if (xDir) hll(hL, aL, bL, hR, aR, bR, 0.5 * (gArr[jL] + gArr[jR]));
             else hll(hL, bL, aL, hR, bR, aR, 0.5 * (gArr[jL] + gArr[jR]));
             if ((iL < 0 && fh > 0) || (iR < 0 && fh < 0)) continue; // sınırdan içeri akış yok
             let fm = 0;
-            if (m) fm = fh > 0 ? fh * (hL < EPS ? 0 : m[jL] / hL) : fh * (hR < EPS ? 0 : m[jR] / hR);
+            if (m) fm = fh > 0 ? fh * (h[jL] < EPS ? 0 : m[jL] / h[jL]) : fh * (h[jR] < EPS ? 0 : m[jR] / h[jR]);
             const fu = xDir ? fn : ft, fv = xDir ? ft : fn;
             if (iL >= 0) { dh[iL] -= fh; dhu[iL] -= fu; dhv[iL] -= fv; if (dm) dm[iL] -= fm; }
             else out(xDir ? 'w' : 'n', -fh, -fm);
@@ -195,9 +224,10 @@
       }
     }
 
-    function region(b) {
+    function region(b, pad) {
       if (b.c1 < 0) return null;
-      return { ca: Math.max(0, b.c0 - 1), cb: Math.min(W - 1, b.c1 + 1), ra: Math.max(0, b.r0 - 1), rb: Math.min(H - 1, b.r1 + 1) };
+      const q = pad || 1;
+      return { ca: Math.max(0, b.c0 - q), cb: Math.min(W - 1, b.c1 + q), ra: Math.max(0, b.r0 - q), rb: Math.min(H - 1, b.r1 + q) };
     }
 
     function waveSpeeds(L, gArr, R, s) {
@@ -213,9 +243,35 @@
       }
     }
 
+    // İkinci derece için Heun başlangıç durumunun kopyası
+    const order = p.order === 1 ? 1 : 2;
+    const h0s = order === 2 ? new Float64Array(N) : null, hu0s = order === 2 ? new Float64Array(N) : null, hv0s = order === 2 ? new Float64Array(N) : null;
+
+    /** Yoğun akış için bir hiperbolik aşama: akı farkı + yerçekimi kaynağı (sürtünme yok). w: muhasebe ağırlığı */
+    function denseStage(R, dt, w) {
+      fluxes(D, gn, R.ra, R.rb, R.ca, R.cb, (e, f) => { edges[e] += w * f * dt * dx; }, order);
+      const k = dt / dx;
+      for (let r = R.ra; r <= R.rb; r++) {
+        for (let c = R.ca; c <= R.cb; c++) {
+          const i = r * W + c;
+          if (wall[i]) continue;
+          const hOld = D.h[i];
+          let hn = hOld + k * D.dh[i];
+          const qx = D.hu[i] + k * D.dhu[i] - dt * G * cos2[i] * hOld * zx[i];
+          const qy = D.hv[i] + k * D.dhv[i] - dt * G * cos2[i] * hOld * zy[i];
+          if (hn < EPS) {
+            if (hn < 0) { clipped -= w * hn * A; hn = 0; }
+            D.h[i] = hn; D.hu[i] = 0; D.hv[i] = 0;
+            continue;
+          }
+          D.h[i] = hn; D.hu[i] = qx; D.hv[i] = qy;
+        }
+      }
+    }
+
     function step() {
       if (done) return 0;
-      const RD = region(D.box), RP = P ? region(P.box) : null;
+      const RD = region(D.box, order === 2 ? 2 : 1), RP = P ? region(P.box) : null;
       if (!RD && !RP) { done = true; reason = 'stopped'; return 0; }
 
       // Bulut için g' cosθ (fazla yoğunluk hücreye göre)
@@ -233,13 +289,11 @@
       const dt = Math.min(p.cfl * dx / (s[0] + s[1]), 0.5, p.tMax - t + 1e-9);
       const k = dt / dx;
 
-      if (RD) fluxes(D, gn, RD.ra, RD.rb, RD.ca, RD.cb, (e, f) => { edges[e] += f * dt * dx; });
-      if (RP) fluxes(P, gP, RP.ra, RP.rb, RP.ca, RP.cb, (e, f, fm) => { pAcc.outflow += fm * dt * dx; });
-
-      // ---- Bulut güncellemesi (yoğun akıştan gelen kaynak aşağıda eklenir) ----
+      // ---- Bulut (birinci derece) ----
       let pMom = 0;
       const nbP = { c0: W, c1: -1, r0: H, r1: -1 };
       if (RP) {
+        fluxes(P, gP, RP.ra, RP.rb, RP.ca, RP.cb, (e, f, fm) => { pAcc.outflow += fm * dt * dx; }, 1);
         for (let r = RP.ra; r <= RP.rb; r++) for (let c = RP.ca; c <= RP.cb; c++) {
           const i = r * W + c;
           if (wall[i]) continue;
@@ -281,7 +335,22 @@
         }
       }
 
-      // ---- Yoğun akış güncellemesi + sürtünme + sürüklenme + bulut kaynağı ----
+      // ---- Yoğun akış: hiperbolik kısım (1. derece: Euler; 2. derece: Heun / SSP-RK2) ----
+      if (RD) {
+        if (order === 2) {
+          for (let r = RD.ra; r <= RD.rb; r++) for (let c = RD.ca; c <= RD.cb; c++) {
+            const i = r * W + c; h0s[i] = D.h[i]; hu0s[i] = D.hu[i]; hv0s[i] = D.hv[i];
+          }
+          denseStage(RD, dt, 0.5);
+          denseStage(RD, dt, 0.5);
+          for (let r = RD.ra; r <= RD.rb; r++) for (let c = RD.ca; c <= RD.cb; c++) {
+            const i = r * W + c;
+            D.h[i] = 0.5 * (h0s[i] + D.h[i]); D.hu[i] = 0.5 * (hu0s[i] + D.hu[i]); D.hv[i] = 0.5 * (hv0s[i] + D.hv[i]);
+          }
+        } else denseStage(RD, dt, 1);
+      }
+
+      // ---- Sürtünme + sürüklenme + bulut kaynağı (adım başına bir kez, kapalı) ----
       const mu = p.mu, xi = p.xi, rho = p.rho;
       const nb = { c0: W, c1: -1, r0: H, r1: -1 };
       momentum = 0; vNowMax = 0; flowing = 0;
@@ -290,17 +359,13 @@
           for (let c = RD.ca; c <= RD.cb; c++) {
             const i = r * W + c;
             if (wall[i]) continue;
-            const hOld = D.h[i];
-            let hn = hOld + k * D.dh[i];
-            let qx = D.hu[i] + k * D.dhu[i] - dt * G * cos2[i] * hOld * zx[i];
-            let qy = D.hv[i] + k * D.dhv[i] - dt * G * cos2[i] * hOld * zy[i];
+            let hn = D.h[i];
             if (hn < EPS) {
-              if (hn < 0) { clipped -= hn * A; hn = 0; }
-              D.h[i] = hn; D.hu[i] = 0; D.hv[i] = 0;
+              D.hu[i] = 0; D.hv[i] = 0;
               if (hn > 0) grow(nb, r, c);
               continue;
             }
-            let u = qx / hn, v = qy / hn;
+            let u = D.hu[i] / hn, v = D.hv[i] / hn;
             const sp = Math.hypot(u, v);
             let sNew = 0;
             if (sp > 0) {

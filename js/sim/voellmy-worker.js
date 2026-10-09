@@ -17,7 +17,8 @@ self.onmessage = (e) => {
     stopRequested = false;
     sim = SLSVoellmy.createSim(m);
     // ~200 kare: kayıt aralığı simülasyon süresine göre (en az 1 s)
-    rec = { every: Math.max(1, (sim.params.tMax || 300) / 200), next: 0, frames: [] };
+    const ev = Number(sim.params.recordEvery) > 0 ? Number(sim.params.recordEvery) : Math.max(1, (sim.params.tMax || 300) / 200);
+    rec = { every: ev, next: 0, frames: [] };
     record();
     wallStart = performance.now();
     lastFrame = 0;

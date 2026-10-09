@@ -136,5 +136,5 @@ ${body}
     return new Blob([ff.zipSync(entries, { level: 6 })], { type: 'application/vnd.google-earth.kmz' });
   }
 
-  SLS.kml = { parseKml, readFile, bboxOf, kmlColor, polygon, line, point, groundOverlay, folder, kmlDocument, canvasPng, zipKmz };
+  SLS.kml = { fflate, parseKml, readFile, bboxOf, kmlColor, polygon, line, point, groundOverlay, folder, kmlDocument, canvasPng, zipKmz };
 })(window.SLS = window.SLS || {});

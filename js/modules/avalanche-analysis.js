@@ -22,8 +22,17 @@
     return c > 0 ? k * c : 0.5 * k * c;
   }
 
+  /** Salm vd. (1990) eğim düzeltmesi f(ψ) = 0,291 / (sin ψ − 0,202 cos ψ); 28°'de 1. */
+  function fpsi(psiDeg) {
+    const p = Math.max(25, Math.min(60, psiDeg)) * D2R;
+    return 0.291 / (Math.sin(p) - 0.202 * Math.cos(p));
+  }
+
   /**
    * Kopma kalınlığı haritası.
+   * method 'direct': d = d₀ (+ kot gradyanı + rüzgâr), yamaca dik, doğrudan
+   * method 'swiss' : d = (ΔHS₃ + g·(z − z_ref)/100 + rüzgâr) · f(ψ)   (İsviçre yöntemi, Salm vd. 1990)
+   * method 'field' : d = (d_çukur + g·(z − z_çukur)/100 + rüzgâr) · f(ψ) / f(ψ_çukur)
    * ctx = { terrain, slope, aspect, mask }; o = { d0, elevRef, grad (m/100 m), wind }
    * Döner: { h0 (düşey yükseklik), d (yamaca dik kalınlık), stats }
    */
@@ -34,8 +43,11 @@
     for (let i = 0; i < N; i++) {
       if (!ctx.mask[i] || Number.isNaN(tr.data[i])) continue;
       let di = o.d0;
-      if (o.elevRef != null && Number.isFinite(o.elevRef) && o.grad) di += o.grad * (tr.data[i] - o.elevRef) / 100;
+      const zr = o.method === 'swiss' ? (o.zref ?? 2000) : o.elevRef;
+      if (zr != null && Number.isFinite(zr) && o.grad) di += o.grad * (tr.data[i] - zr) / 100;
       di += windDelta(ctx.aspect[i], o.wind);
+      if (o.method === 'swiss') di *= fpsi(ctx.slope[i]);
+      else if (o.method === 'field') di *= fpsi(ctx.slope[i]) / fpsi(o.refSlope || 28);
       di = Math.max(0.05, di);
       d[i] = di;
       const hv = di / Math.cos(ctx.slope[i] * D2R);
@@ -86,7 +98,7 @@
       release: st.releaseVolume, entrained: st.entrained || 0, erodedCover: erodedVol * cs * cs,
       deposit: st.depositVolume, outflow: st.outflow, outflowShare, edges: st.edges,
       toPowder: st.toPowderVol || 0, powderPmax: ppow, powderHa: powderHa * ha, powder: st.powder,
-      massErr: (inflow - st.depositVolume - st.outflow - st.clipped - (st.toPowderVol || 0)) / st.releaseVolume,
+      massErr: (inflow + st.clipped - st.depositVolume - st.outflow - (st.toPowderVol || 0)) / st.releaseVolume,
       t: st.t, steps: st.steps, wallMs: st.wallMs, reason: st.reason,
       complete: outflowShare <= 0.001 && st.reason !== 'tmax' && st.reason !== 'user',
     };
@@ -246,5 +258,5 @@
     }).sort((a, b) => b.zone - a.zone || b.pmax - a.pmax);
   }
 
-  SLS.avAnalysis = { AFFECTED_H, windDelta, releaseDepth, analyze, flowProfile, zoningMatrix, zoneAreas, singleZone, assetRisk };
+  SLS.avAnalysis = { AFFECTED_H, windDelta, fpsi, releaseDepth, analyze, flowProfile, zoningMatrix, zoneAreas, singleZone, assetRisk };
 })(window.SLS = window.SLS || {});

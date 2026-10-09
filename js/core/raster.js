@@ -82,6 +82,50 @@
     return canvas;
   }
 
+  /**
+   * Sürekli renk: sınıf eşiklerini kontrol noktası olarak kullanır, aradaki renkleri (log ölçekte) karıştırır.
+   * Böylece sınıflı ve sürekli görünüm aynı renk dilini konuşur.
+   */
+  function continuousStops(classes) {
+    const st = classes.map((c) => ({ v: c.min, col: c.color }));
+    const last = classes[classes.length - 1];
+    st.push({ v: Number.isFinite(last.max) ? last.max : last.min * 1.6, col: last.color });
+    return st;
+  }
+  function continuousColor(stops, v) {
+    if (!(v >= stops[0].v)) return null;
+    if (v >= stops[stops.length - 1].v) return stops[stops.length - 1].col;
+    for (let k = 0; k < stops.length - 1; k++) {
+      const a = stops[k], b = stops[k + 1];
+      if (v < b.v) {
+        const f = a.v > 0 ? Math.log(v / a.v) / Math.log(b.v / a.v) : (v - a.v) / (b.v - a.v);
+        return [a.col[0] + (b.col[0] - a.col[0]) * f, a.col[1] + (b.col[1] - a.col[1]) * f, a.col[2] + (b.col[2] - a.col[2]) * f];
+      }
+    }
+    return null;
+  }
+  function paintContinuous(canvas, w, h, values, classes, alpha, mask) {
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    const stops = continuousStops(classes);
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const px = img.data;
+    for (let i = 0; i < w * h; i++) {
+      if (mask && !mask(i)) continue;
+      const col = continuousColor(stops, values[i]);
+      if (!col) continue;
+      px[i * 4] = col[0]; px[i * 4 + 1] = col[1]; px[i * 4 + 2] = col[2]; px[i * 4 + 3] = alpha;
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+  /** Lejant için CSS gradyanı */
+  function gradientCss(classes) {
+    const st = continuousStops(classes), lo = Math.log(st[0].v || 1e-3), hi = Math.log(st[st.length - 1].v);
+    return 'linear-gradient(90deg,' + st.map((s) => `rgb(${s.col.join(',')}) ${(((Math.log(s.v || 1e-3) - lo) / (hi - lo)) * 100).toFixed(1)}%`).join(',') + ')';
+  }
+
   /** Tek renkli maske boyama (Uint8 / Int32 dizisi, değer>0 olan hücreler). */
   function paintMask(canvas, w, h, arr, color, alpha, pick) {
     if (canvas.width !== w) canvas.width = w;
@@ -157,5 +201,5 @@
     return { labels, sizes, count: n };
   }
 
-  SLS.raster = { RAMPS, classColor, paint, paintMask, lonLatToGrid, cellAt, rasterizePolygon, components };
+  SLS.raster = { RAMPS, classColor, paint, paintContinuous, continuousStops, continuousColor, gradientCss, paintMask, lonLatToGrid, cellAt, rasterizePolygon, components };
 })(window.SLS = window.SLS || {});

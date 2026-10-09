@@ -1,5 +1,15 @@
 # Sürüm Notları / Changelog
 
+## 0.6.0 — 2026-10-10 — İkinci derece çözücü, RAMMS sürtünme tablosu, İsviçre kopma kalınlığı, proje kaydetme
+
+- İkinci derece yöntem (MUSCL-MC + HLL + Heun) varsayılan; ızgara bağımlılığı belirgin azaldı (oluk testi: 10 m'de kaçış hatası %10 → %5).
+- RAMMS::AVALANCHE MuXi tablosu ile hücre bazlı μ / ξ (arazi sınıfı × kot × hacim × tekerrür 10/30/100/300 yıl).
+- Arazi sınıflandırması katmanı, ayarlanabilir kot sınırları.
+- İsviçre kopma kalınlığı yöntemi f(ψ) = 0,291 / (sin ψ − 0,202 cos ψ) (Salm vd. 1990).
+- Orman poligonu (çizim / KML).
+- Proje kaydet / aç (IndexedDB) ve .slsproj dışa / içe aktarma.
+- Sürekli renk skalası, kayıt aralığı ve sayısal yöntem seçimi.
+
 ## 0.5.0 — 2026-10-10 — Simülasyon zaman çizelgesi
 
 - Akış hesap sırasında kaydedilir (senaryo başına ~200 kare, 8 bit, etkin bölge kırpılmış).

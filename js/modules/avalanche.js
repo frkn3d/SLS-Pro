@@ -35,6 +35,9 @@
     { id: 'powder', ramp: 'powder', key: 'res.powder', needs: 'powder' },
   ];
   const ZONE_HEX = ['#94a3b8', '#facc15', '#2563eb', '#dc2626'];
+  // Arazi sınıfı renkleri: açık yamaç, kanal, oluk, düz
+  const TC_RGB = [[148, 163, 184], [251, 146, 60], [220, 38, 38], [134, 239, 172]];
+  const TC_HEX = TC_RGB.map((c) => `rgb(${c.join(',')})`);
 
   const ICON = {
     draw: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="3 3"/><path d="M4 4h4M4 4v4"/></svg>',
@@ -77,7 +80,12 @@
         mode: 'single', T: 100, source: 'library', useCalib: true,
         mu: 0.18, xi: 2500, rho: 300, cd: 2, tMax: 300, forest: false,
         entrain: false, erodDepth: 0.3, erodRho: 150, kappaE: 0.02, powder: false,
+        limits: { upper: 1500, lower: 1000 }, order: 2, recordEvery: 0,
       },
+      tclass: null, showTclass: false,
+      forestPolys: [], drawingForest: false,
+      colorMode: 'classes',
+      project: { id: null, name: '', busy: false, msg: null, err: null },
       landcover: null,
       lcBusy: false, lcError: null,
       assets: [], assetsName: null, assetsError: null, kmlError: null,
@@ -92,7 +100,7 @@
   }
   function saveMeta() { try { localStorage.setItem(META_KEY, JSON.stringify(state.report.meta)); } catch (_) { /* yok say */ } }
   function freshRelease() {
-    return { polys: [], selected: new Set(), fixedMask: null, d0: 1, d0_30: 1.0, d0_300: 1.5, showPra: true, drawingPoly: false, mask: null, h0: null, stats: null };
+    return { polys: [], selected: new Set(), fixedMask: null, d0: 1, d0_30: 1.0, d0_300: 1.5, method: 'direct', zref: 2000, showPra: true, drawingPoly: false, mask: null, h0: null, stats: null };
   }
   function freshSim() {
     return {
@@ -190,6 +198,7 @@
         }).join('')}
       </nav>
       ${panel}
+      ${projectSection()}
       ${layersSection()}
       <footer class="sidebar-foot">
         <details>
@@ -394,7 +403,17 @@
       </section>
 
       <section class="section">
-        <h4>${esc(t(dual ? 'rel.d0Dual' : 'rel.d0'))}</h4>
+        <h4>${esc(t('rel.method'))}</h4>
+        <div class="seg seg-wrap">
+          <button type="button" data-rmethod="direct" class="${R.method === 'direct' ? 'sel' : ''}">${esc(t('rel.mDirect'))}</button>
+          <button type="button" data-rmethod="swiss" class="${R.method === 'swiss' ? 'sel' : ''}">${esc(t('rel.mSwiss'))}</button>
+          ${F ? `<button type="button" data-rmethod="field" class="${R.method === 'field' ? 'sel' : ''}">${esc(t('rel.mField'))}</button>` : ''}
+        </div>
+        <p class="hint">${esc(t('rel.m' + R.method[0].toUpperCase() + R.method.slice(1) + 'Hint'))}</p>
+        ${R.method === 'swiss' ? `<label class="field" style="margin-top:6px"><span>${esc(t('rel.zref'))} (m)</span><input class="input mono" type="number" step="50" data-zref value="${R.zref}"></label>` : ''}
+      </section>
+      <section class="section">
+        <h4>${esc(t(R.method === 'swiss' ? (dual ? 'rel.dhsDual' : 'rel.dhs') : (dual ? 'rel.d0Dual' : 'rel.d0')))}</h4>
         ${dual ? `
           <div class="fgrid2">
             <label class="field"><span>T = 30 ${esc(t('unit.years'))} (m)</span><input class="input mono" type="number" step="0.05" min="0.1" data-d0f="d0_30" value="${R.d0_30}"></label>
@@ -446,20 +465,54 @@
       </div>`;
   }
 
-  /** Senaryo için sürtünme parametreleri: özel → kullanıcı seti → kalibre set → kitaplık. */
+  /**
+   * Senaryo için sürtünme: özel tekdüze → kullanıcı seti (tekdüze veya ölçek) → eşleşen kalibrasyon seti →
+   * RAMMS MuXi tablosu (hücre bazlı: arazi sınıfı × kot bandı × hacim × tekerrür).
+   * Döner: { kind: 'maps' | 'uniform', mu, xi (kopma alanı ortalaması), rho, label, maps? }
+   */
+  const muxiCache = new Map();
   function resolveParams(T, volume) {
-    const P = state.params, lib = SLS.paramsLibrary;
-    if (P.mode === 'single' && P.source === 'custom') return { mu: P.mu, xi: P.xi, rho: P.rho, label: t('par.src.custom'), kind: 'custom' };
-    if (P.mode === 'single' && P.source && P.source.startsWith('u')) {
-      const s = lib.userSets().find((x) => x.id === P.source);
-      if (s) return { mu: s.mu, xi: s.xi, rho: s.rho, label: s.name, kind: 'user' };
+    const P = state.params, lib = SLS.paramsLibrary, sn = lib.SNOW[state.snowType];
+    let prm;
+    if (P.mode === 'single' && P.source === 'custom') prm = { kind: 'uniform', mu: P.mu, xi: P.xi, rho: P.rho, label: t('par.src.custom') };
+    else {
+      let set = null;
+      if (P.mode === 'single' && P.source && P.source.startsWith('u')) set = lib.userSets().find((x) => x.id === P.source) || null;
+      if (!set && P.useCalib) set = lib.userSets().find((x) => x.snowType === state.snowType && Number(x.T) === Number(T)) || null;
+      if (set && set.kind !== 'scale') prm = { kind: 'uniform', mu: set.mu, xi: set.xi, rho: set.rho || sn.rho, label: set.name };
+      else prm = { kind: 'maps', scale: set ? { mu: set.muScale, xi: set.xiScale } : null, rho: (set && set.rho) || sn.rho,
+        label: set ? set.name : t('par.src.ramms', { vc: t('vc.' + lib.volumeClass(volume).id) }) + (sn.estimate ? ' · ' + t('par.snowEstimate') : '') };
     }
-    if (P.useCalib) {
-      const us = lib.userSets().find((s) => s.snowType === state.snowType && Number(s.T) === Number(T));
-      if (us) return { mu: us.mu, xi: us.xi, rho: us.rho, label: us.name, kind: 'user' };
+    const maps = buildMaps(prm, T, volume);
+    const sum = lib.summarize(maps, state.tclass ? state.tclass.cls : new Uint8Array(maps.muMap.length), state.release.mask);
+    return Object.assign(prm, { maps, mu: sum.muRelease, xi: sum.xiRelease, share: sum.share });
+  }
+  function forestMask() {
+    const tr = state.terrain, N = tr.width * tr.height;
+    let m = null;
+    if (state.params.forest && state.landcover) { m = new Uint8Array(N); const c = state.landcover.classes; for (let i = 0; i < N; i++) if (c[i] === SLS.landcover.FOREST) m[i] = 1; }
+    if (state.forestPolys.length) {
+      m = m || new Uint8Array(N);
+      for (const ring of state.forestPolys) SLS.raster.rasterizePolygon(tr, ring, (i) => { m[i] = 1; });
     }
-    const L = lib.lookup(state.snowType, T, volume);
-    return { mu: L.mu, xi: L.xi, rho: L.rho, label: t('par.src.library', { vc: t('vc.' + L.volumeClass) }), kind: 'library' };
+    return m;
+  }
+  function buildMaps(prm, T, volume) {
+    const tr = state.terrain, N = tr.width * tr.height, lib = SLS.paramsLibrary, P = state.params;
+    const fm = forestMask();
+    const key = [prm.kind, prm.mu, prm.xi, prm.scale && prm.scale.mu, prm.scale && prm.scale.xi, T, lib.volumeClass(volume).id, state.snowType, P.limits.upper, P.limits.lower, P.forest, state.forestPolys.length, tr.originX, tr.width].join('|');
+    if (muxiCache.has(key)) return muxiCache.get(key);
+    let maps;
+    if (prm.kind === 'uniform') {
+      const muMap = new Float32Array(N).fill(prm.mu), xiMap = new Float32Array(N).fill(prm.xi);
+      if (fm) for (let i = 0; i < N; i++) if (fm[i]) { muMap[i] = prm.mu + lib.FOREST.dMu; xiMap[i] = Math.min(prm.xi, lib.FOREST.xi); }
+      maps = { muMap, xiMap };
+    } else {
+      maps = lib.muxiMaps({ terrain: tr, cls: state.tclass.cls, T, volume, snowType: state.snowType, limits: P.limits, forestMask: fm, scale: prm.scale });
+    }
+    muxiCache.clear();
+    muxiCache.set(key, maps);
+    return maps;
   }
 
   function scenarios() {
@@ -469,8 +522,13 @@
       : [{ key: 'S', T: P.T, d0: R.d0 }];
   }
   function releaseOpts(d0) {
-    const F = state.field;
-    return { d0, elevRef: F && F.useGrad && F.sim.elev != null ? F.sim.elev : null, grad: 0.05, wind: state.wind };
+    const F = state.field, R = state.release;
+    if (R.method === 'swiss') return { method: 'swiss', d0, zref: R.zref, grad: 0.05, wind: state.wind };
+    if (R.method === 'field' && F) {
+      const loc = F.profile.location || {};
+      return { method: 'field', d0, elevRef: F.useGrad && F.sim.elev != null ? F.sim.elev : null, grad: 0.05, wind: state.wind, refSlope: Number(loc.slope) || 28 };
+    }
+    return { method: 'direct', d0, elevRef: F && F.useGrad && F.sim.elev != null ? F.sim.elev : null, grad: 0.05, wind: state.wind };
   }
   const powderAllowed = () => SLS.paramsLibrary.SNOW[state.snowType].powder;
 
@@ -482,6 +540,7 @@
     });
     const cur = scs[0].prm;
     const sets = lib.userSets();
+    const clsNames = ['tc.open', 'tc.channelled', 'tc.gully', 'tc.flat'];
     return `
       <section class="section">
         <h2>${esc(t('par.title'))}</h2>
@@ -508,16 +567,27 @@
           <table class="ptable"><thead><tr><th></th><th>T30</th><th>T300</th></tr></thead><tbody>
             <tr><td>d₀</td>${scs.map((s) => `<td>${n(s.d0, 2)} m</td>`).join('')}</tr>
             <tr><td>${esc(t('rel.volume'))}</td>${scs.map((s) => `<td>${n(s.vol)} m³</td>`).join('')}</tr>
-            <tr><td>μ</td>${scs.map((s) => `<td>${n(s.prm.mu, 3)}</td>`).join('')}</tr>
-            <tr><td>ξ</td>${scs.map((s) => `<td>${n(s.prm.xi)}</td>`).join('')}</tr>
+            <tr><td>μ̄ ${esc(t('par.inRelease'))}</td>${scs.map((s) => `<td>${n(s.prm.mu, 3)}</td>`).join('')}</tr>
+            <tr><td>ξ̄ ${esc(t('par.inRelease'))}</td>${scs.map((s) => `<td>${n(s.prm.xi)}</td>`).join('')}</tr>
             <tr><td>ρ</td>${scs.map((s) => `<td>${n(s.prm.rho)}</td>`).join('')}</tr>
             <tr><td>${esc(t('par.source'))}</td>${scs.map((s) => `<td class="sm">${esc(s.prm.label)}</td>`).join('')}</tr>
           </tbody></table>` : `
-          <div class="seg" style="margin-bottom:10px">${[30, 100, 300].map((T) => `<button type="button" data-T="${T}" class="${P.T === T ? 'sel' : ''}">T ${T}</button>`).join('')}</div>
-          <p class="hint" style="margin:0 0 10px">${esc(t('par.source'))}: <b>${esc(cur.label)}</b>${cur.kind !== 'library' ? ` · <a href="#" id="toLibrary">${esc(t('par.backToLib'))}</a>` : ''}</p>
-          ${slider('mu', 'par.mu', 0.08, 0.6, 0.005, cur.mu, 3, '')}
-          ${slider('xi', 'par.xi', 200, 5000, 50, cur.xi, 0, 'm/s²')}
+          <div class="seg" style="margin-bottom:10px">${[10, 30, 100, 300].map((T) => `<button type="button" data-T="${T}" class="${P.T === T ? 'sel' : ''}">T ${T}</button>`).join('')}</div>
+          <p class="hint" style="margin:0 0 10px">${esc(t('par.source'))}: <b>${esc(cur.label)}</b>${cur.kind !== 'maps' || cur.scale ? ` · <a href="#" id="toLibrary">${esc(t('par.backToLib'))}</a>` : ''}</p>
+          ${cur.kind === 'maps' ? `<p class="hint" style="margin:0 0 8px">${esc(t('par.mapsHint'))}</p>` : ''}
+          ${slider('mu', cur.kind === 'maps' ? 'par.muMean' : 'par.mu', 0.08, 0.6, 0.005, Math.round(cur.mu * 1000) / 1000, 3, '')}
+          ${slider('xi', cur.kind === 'maps' ? 'par.xiMean' : 'par.xi', 200, 5000, 50, Math.round(cur.xi / 50) * 50, 0, 'm/s²')}
           ${slider('rho', 'par.rho', 150, 550, 10, cur.rho, 0, 'kg/m³')}`}
+        ${state.tclass ? `
+          <table class="ptable" style="margin-top:8px"><thead><tr><th>${esc(t('tc.title'))}</th><th>${esc(t('tc.share'))}</th></tr></thead><tbody>
+            ${clsNames.map((k, i) => `<tr><td><span class="zdot" style="background:${TC_HEX[i]}"></span>${esc(t(k))}</td><td>${pct(cur.share ? cur.share[i] : 0)}</td></tr>`).join('')}
+          </tbody></table>
+          <label class="toggle"><span>${esc(t('tc.show'))}</span><span class="switch"><input type="checkbox" id="tclassToggle" ${state.showTclass ? 'checked' : ''}><span></span></span></label>
+          <div class="fgrid2">
+            <label class="field"><span>${esc(t('par.limUpper'))} (m)</span><input class="input mono" type="number" step="50" data-lim="upper" value="${P.limits.upper}"></label>
+            <label class="field"><span>${esc(t('par.limLower'))} (m)</span><input class="input mono" type="number" step="50" data-lim="lower" value="${P.limits.lower}"></label>
+          </div>
+          <p class="hint">${esc(t('par.limHint'))}</p>` : ''}
         <p class="hint">${esc(t('par.libHint'))}</p>
         <details class="calib">
           <summary>${esc(t('par.calib'))} (${sets.length})</summary>
@@ -529,6 +599,11 @@
       </section>
       <section class="section">
         <h4>${esc(t('par.forest'))}</h4>
+        <div class="row" style="margin-bottom:6px">
+          <button class="btn ${state.drawingForest ? 'on' : ''}" id="forestDraw" style="flex:1">${ICON.poly}<span>${esc(t(state.drawingForest ? 'rel.finish' : 'forest.draw'))}</span></button>
+          ${fileBtn('kmlForest', 'forest.kml', '.kml,.kmz')}
+        </div>
+        ${state.forestPolys.length ? `<div class="row" style="margin-bottom:6px"><span class="hint" style="flex:1;margin:0">${esc(t('forest.count', { n: state.forestPolys.length }))}</span><button class="btn" id="forestClear">${esc(t('terrain.clear'))}</button></div>` : ''}
         <label class="toggle"><span>${esc(t('par.forestToggle'))}</span>
           <span class="switch"><input type="checkbox" id="forestToggle" ${P.forest ? 'checked' : ''} ${state.lcBusy ? 'disabled' : ''}><span></span></span>
         </label>
@@ -559,6 +634,13 @@
         <h4>${esc(t('par.flow'))}</h4>
         ${slider('cd', 'par.cd', 1, 2, 0.1, P.cd, 1, '')}
         ${slider('tMax', 'par.tMax', 60, 900, 30, P.tMax, 0, 's')}
+        <div class="param-head" style="margin-top:6px"><label>${esc(t('par.order'))}</label></div>
+        <div class="seg seg-wrap">
+          <button type="button" data-order="2" class="${P.order === 2 ? 'sel' : ''}">${esc(t('par.order2'))}</button>
+          <button type="button" data-order="1" class="${P.order === 1 ? 'sel' : ''}">${esc(t('par.order1'))}</button>
+        </div>
+        <div class="param-head" style="margin-top:10px"><label>${esc(t('par.record'))}</label></div>
+        <div class="seg">${[0, 0.5, 1, 2].map((v) => `<button type="button" data-rec="${v}" class="${P.recordEvery === v ? 'sel' : ''}">${v ? n(v, 1) + ' s' : esc(t('par.auto'))}</button>`).join('')}</div>
         <p class="hint">${esc(t('par.flowHint'))}</p>
         <div style="margin-top:12px"><button class="btn primary block" data-goto="run">${esc(t('par.next'))} ${ICON.arrow}</button></div>
       </section>`;
@@ -595,7 +677,7 @@
           <dt>${esc(t('par.mode'))}</dt><dd style="font-family:var(--font)">${esc(t(P.mode === 'dual' ? 'par.modeDual' : 'par.modeSingle'))}</dd>
           <dt>${esc(t('par.snowType'))}</dt><dd style="font-family:var(--font)">${esc(t('snow.' + state.snowType))}</dd>
           <dt>${esc(t('run.scenarios'))}</dt><dd>${scs.map((s) => `${s.key === 'S' ? 'T' + s.T : s.key} · d₀ ${n(s.d0, 2)} m`).join('<br>')}</dd>
-          <dt>${esc(t('run.options'))}</dt><dd style="font-family:var(--font)">${[P.forest && esc(t('par.forest')), P.entrain && esc(t('ent.title')), P.powder && powderAllowed() && esc(t('pw.title')), state.wind.on && esc(t('wind.title')), state.field && esc(t('fp.short'))].filter(Boolean).join(' · ') || '—'}</dd>
+          <dt>${esc(t('run.options'))}</dt><dd style="font-family:var(--font)">${[(P.forest || state.forestPolys.length) && esc(t('par.forest')), P.order === 2 && esc(t('par.order2')), P.entrain && esc(t('ent.title')), P.powder && powderAllowed() && esc(t('pw.title')), state.wind.on && esc(t('wind.title')), state.field && esc(t('fp.short'))].filter(Boolean).join(' · ') || '—'}</dd>
           <dt>${esc(t('terrain.grid'))}</dt><dd>${n(tr.width)} × ${n(tr.height)} · ${n(tr.cellSize)} m</dd>
         </dl>
         <div style="margin-top:14px">
@@ -645,6 +727,10 @@
           <p class="hint">${esc(t('res.matrixHint'))}</p>` : `
           <div class="seg seg-wrap" role="radiogroup">
             ${layers.map((l) => `<button type="button" data-rlayer="${l.id}" class="${S.layer === l.id ? 'sel' : ''}">${esc(t(l.key))}</button>`).join('')}
+          </div>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" data-cmode="classes" class="${state.colorMode === 'classes' ? 'sel' : ''}">${esc(t('cm.classes'))}</button>
+            <button type="button" data-cmode="continuous" class="${state.colorMode === 'continuous' ? 'sel' : ''}">${esc(t('cm.continuous'))}</button>
           </div>
           <div class="stats" style="margin-top:12px">
             <div class="stat"><div class="k">${esc(t('res.vmaxAll'))}</div><div class="v">${n(A.vmax, 1)}<small>m/s</small></div></div>
@@ -731,7 +817,12 @@
       </label>`;
   }
 
-  function legendHtml(title, classes, unitFmt) {
+  function legendHtml(title, classes, unitFmt, allowCont) {
+    if (allowCont && state.colorMode === 'continuous' && !classes[0].key) {
+      const st = SLS.raster.continuousStops(classes);
+      return `<h5>${esc(title)}</h5><div class="grad" style="background:${SLS.raster.gradientCss(classes)}"></div>
+        <div class="grad-ticks mono"><span>${n(st[0].v, st[0].v < 1 ? 2 : 0)}</span><span>${n(st[Math.floor(st.length / 2)].v, st[Math.floor(st.length / 2)].v < 1 ? 1 : 0)}</span><span>≥ ${n(st[st.length - 1].v)}</span></div>`;
+    }
     return `<h5>${esc(title)}</h5>` + classes.map((c) =>
       `<div class="li"><span class="sw" style="background:rgb(${c.color.join(',')})"></span>${c.key ? esc(t(c.key)) : unitFmt(c)}</div>`).join('');
   }
@@ -747,21 +838,23 @@
       html = `<h5>${esc(t('ws.step.release'))}</h5>
         <div class="li"><span class="sw" style="background:#22d3ee"></span>${esc(t('legend.release'))}</div>
         ${state.step === 'release' && state.release.showPra ? `<div class="li"><span class="sw" style="background:#a78bfa"></span>${esc(t('legend.pra'))}</div>` : ''}
-        ${state.step === 'params' && state.params.forest && state.landcover ? `<div class="li"><span class="sw" style="background:rgb(22,128,61)"></span>${esc(t('lc.tree'))}</div>` : ''}`;
+        ${state.step === 'params' && state.params.forest && state.landcover ? `<div class="li"><span class="sw" style="background:rgb(22,128,61)"></span>${esc(t('lc.tree'))}</div>` : ''}
+        ${state.step === 'params' && state.forestPolys.length ? `<div class="li"><span class="sw" style="background:#4ade80"></span>${esc(t('forest.legend'))}</div>` : ''}
+        ${state.step === 'params' && state.showTclass ? ['tc.open', 'tc.channelled', 'tc.gully', 'tc.flat'].map((k, i) => `<div class="li"><span class="sw" style="background:${TC_HEX[i]}"></span>${esc(t(k))}</div>`).join('') : ''}`;
     } else if (state.step === 'run' && S.status === 'running') {
       html = legendHtml(t('legend.flowH'), SLS.raster.RAMPS.height.classes, rangeLabel);
       if (state.params.powder && powderAllowed()) html += `<div class="li"><span class="sw" style="background:rgb(196,160,255)"></span>${esc(t('legend.cloud'))}</div>`;
     } else if (state.step === 'run' && S.status === 'done' && S.tl.active && tlFrames()) {
       const f = tlFrames()[S.tl.idx];
       html = legendHtml(`${t(S.tl.kind === 'v' ? 'tl.speed' : 'tl.height')} (${S.tl.kind === 'v' ? 'm/s' : 'm'}) · t = ${n(f.t, 1)} s`,
-        SLS.raster.RAMPS[S.tl.kind === 'v' ? 'velocity' : 'height'].classes, rangeLabel);
+        SLS.raster.RAMPS[S.tl.kind === 'v' ? 'velocity' : 'height'].classes, rangeLabel, true);
       if (f.pq) html += `<div class="li"><span class="sw" style="background:rgb(196,160,255)"></span>${esc(t('legend.cloud'))}</div>`;
     } else if ((state.step === 'run' || state.step === 'report') && S.status === 'done') {
       if (S.view === 'matrix') html = legendHtml(t('res.matrix'), SLS.raster.RAMPS.matrix.classes, rangeLabel);
       else {
         const L = RESULT_LAYERS.find((l) => l.id === S.layer);
         const ramp = SLS.raster.RAMPS[L.ramp];
-        html = legendHtml(`${t(L.key)}${L.ramp === 'zones' ? '' : ' (' + ramp.unit + ')'}`, ramp.classes, rangeLabel);
+        html = legendHtml(`${t(L.key)}${L.ramp === 'zones' ? '' : ' (' + ramp.unit + ')'}`, ramp.classes, rangeLabel, true);
       }
       if (S.assetRisk && S.assetRisk.length) html += `<div class="li" style="margin-top:6px"><span class="sw" style="background:#e6edf3;border-radius:50%"></span>${esc(t('assets.title'))}</div>`;
     }
@@ -837,13 +930,17 @@
     on('#relClear', 'onclick', () => { const R = state.release; R.polys = []; R.selected.clear(); R.fixedMask = null; updateRelease(); render(); });
     on('#kmlRelease', 'onchange', (e) => importKml(e.target.files[0], 'release'));
     sb.querySelectorAll('[data-d0]').forEach((b) => b.onclick = () => { state.release.d0 = Number(b.dataset.d0); updateRelease(); render(); });
+    sb.querySelectorAll('[data-rmethod]').forEach((b) => b.onclick = () => { state.release.method = b.dataset.rmethod; updateRelease(); render(); });
+    on('#relClear', 'onclick', () => { const R = state.release; R.polys = []; R.selected.clear(); R.fixedMask = null; updateRelease(); render(); });
+    const zr = sb.querySelector('[data-zref]');
+    if (zr) zr.onchange = () => { const v = Number(zr.value); if (Number.isFinite(v)) { state.release.zref = v; updateRelease(); render(); } };
     sb.querySelectorAll('[data-d0f]').forEach((inp) => inp.onchange = () => {
       const v = Number(inp.value);
       if (Number.isFinite(v) && v > 0) { state.release[inp.dataset.d0f] = Math.round(v * 100) / 100; updateRelease(); render(); }
     });
     on('#profileSel', 'onchange', (e) => {
       const id = e.target.value;
-      if (!id) { state.field = null; updateRelease(); render(); return; }
+      if (!id) { state.field = null; if (state.release.method === 'field') state.release.method = 'direct'; updateRelease(); render(); return; }
       const pr = SLS.snowpack.get(id); if (pr) applyProfile(pr);
     });
     on('#profileFile', 'onchange', async (e) => {
@@ -875,8 +972,8 @@
         const P = state.params;
         if (id === 'mu' || id === 'xi' || id === 'rho') {
           if (P.source !== 'custom') {
-            const sc = scenarios()[0], rel = AN().releaseDepth(ctx(), releaseOpts(sc.d0));
-            Object.assign(P, resolveParams(sc.T, rel.stats.volume));
+            const sc = scenarios()[0], rel = AN().releaseDepth(ctx(), releaseOpts(sc.d0)), cur = resolveParams(sc.T, rel.stats.volume);
+            P.mu = Math.round(cur.mu * 1000) / 1000; P.xi = Math.round(cur.xi / 50) * 50; P.rho = cur.rho;
             P.source = 'custom';
           }
         }
@@ -902,6 +999,32 @@
       invalidateSim(); render();
     });
     on('#forestToggle', 'onchange', (e) => setForest(e.target.checked));
+    on('#tclassToggle', 'onchange', (e) => { state.showTclass = e.target.checked; syncOverlays(); });
+    sb.querySelectorAll('[data-lim]').forEach((inp) => inp.onchange = () => {
+      const v = Number(inp.value);
+      if (Number.isFinite(v)) { state.params.limits[inp.dataset.lim] = v; invalidateSim(); render(); }
+    });
+    sb.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { state.params.order = Number(b.dataset.order); invalidateSim(); render(); });
+    sb.querySelectorAll('[data-rec]').forEach((b) => b.onclick = () => { state.params.recordEvery = Number(b.dataset.rec); invalidateSim(); render(); });
+    on('#forestDraw', 'onclick', () => {
+      if (state.drawingForest) { mapView.finishPolygon(); return; }
+      state.drawingForest = true;
+      hint(t('rel.polyDrawing'));
+      mapView.startPolygon((ring) => {
+        state.drawingForest = false; hint(null);
+        if (ring) { state.forestPolys.push(ring); updateForestLayer(); invalidateSim(); }
+        render();
+      });
+      render();
+    });
+    on('#forestClear', 'onclick', () => { state.forestPolys = []; updateForestLayer(); invalidateSim(); render(); });
+    on('#kmlForest', 'onchange', (e) => importKml(e.target.files[0], 'forest'));
+    sb.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => { state.colorMode = b.dataset.cmode; paintResult(); if (state.sim.tl && state.sim.tl.active) tlShow(state.sim.tl.idx); render(); });
+    on('#projSave', 'onclick', () => saveProject());
+    on('#projList', 'onclick', () => openProjectList());
+    on('#projExport', 'onclick', () => exportProject());
+    on('#projImport', 'onchange', (e) => importProjectFile(e.target.files[0]));
+    on('#projName', 'oninput', (e) => { state.project.name = e.target.value; });
     on('#entToggle', 'onchange', (e) => { state.params.entrain = e.target.checked; invalidateSim(); render(); });
     sb.querySelectorAll('[data-ent]').forEach((inp) => inp.onchange = () => {
       const v = Number(inp.value); if (Number.isFinite(v) && v >= 0) { state.params[inp.dataset.ent] = v; invalidateSim(); }
@@ -979,7 +1102,17 @@
     }
     SLS.currentTerrain = terrain;
     state.corners = SLS.terrain.cornersWgs84(terrain);
-    ['slope', 'forest', 'pra', 'release', 'result', 'sim', 'simPowder'].forEach((id) => mapView.removeOverlay(id));
+    ['slope', 'tclass', 'forest', 'pra', 'release', 'result', 'sim', 'simPowder'].forEach((id) => mapView.removeOverlay(id));
+    state.tclass = SLS.paramsLibrary.classifyTerrain(terrain, slope);
+    {
+      const cv = canvas('tclass'), W = terrain.width, H = terrain.height, cls = state.tclass.cls;
+      cv.width = W; cv.height = H;
+      const g = cv.getContext('2d'), img = g.createImageData(W, H);
+      for (let i = 0; i < W * H; i++) { const col = TC_RGB[cls[i]]; img.data[i * 4] = col[0]; img.data[i * 4 + 1] = col[1]; img.data[i * 4 + 2] = col[2]; img.data[i * 4 + 3] = Number.isNaN(terrain.data[i]) ? 0 : 150; }
+      g.putImageData(img, 0, 0);
+      mapView.setOverlay('tclass', cv, state.corners, 0.7);
+      mapView.refreshOverlay('tclass');
+    }
     computePra();
     updateRelease(true);
     SLS.raster.paint(canvas('slope'), terrain.width, terrain.height, slope, SLS.terrain.SLOPE_CLASSES, 200);
@@ -1009,6 +1142,12 @@
         if (!polys.length) throw new Error(t('kml.noPolygon'));
         state.release.polys.push(...polys);
         updateRelease();
+      } else if (purpose === 'forest') {
+        const polys = feats.filter((f) => f.type === 'Polygon').map((f) => f.coords);
+        if (!polys.length) throw new Error(t('kml.noPolygon'));
+        state.forestPolys.push(...polys);
+        updateForestLayer();
+        invalidateSim();
       } else if (purpose === 'assets') {
         state.assets = feats;
         state.assetsName = file.name;
@@ -1037,7 +1176,7 @@
   function applyProfile(pr, silent) {
     const s = SLS.snowpack.toSimulation(pr);
     state.field = { id: pr.id, profile: pr, sim: s, useGrad: s.elev != null };
-    if (s.d0) state.release.d0 = Math.round(s.d0 * 100) / 100;
+    if (s.d0) { state.release.d0 = Math.round(s.d0 * 100) / 100; state.release.method = 'field'; }
     state.snowType = s.snowType;
     if (!powderAllowed()) state.params.powder = false;
     if (s.erodibleDepth > 0) {
@@ -1167,17 +1306,12 @@
 
       const z = new Float32Array(tr.data);
       const h0c = new Float32Array(h0);
+      const muMap = new Float32Array(prm.maps.muMap), xiMap = new Float32Array(prm.maps.xiMap);
       const msg = {
-        type: 'start', width: W, height: H, dx: tr.cellSize, z, h0: h0c,
-        params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, cd: P.cd, tMax: P.tMax, kappaE: P.kappaE, rhoCover: P.erodRho, powder: usePowder },
+        type: 'start', width: W, height: H, dx: tr.cellSize, z, h0: h0c, muMap, xiMap,
+        params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, cd: P.cd, tMax: P.tMax, kappaE: P.kappaE, rhoCover: P.erodRho, powder: usePowder, order: P.order, recordEvery: P.recordEvery },
       };
-      const transfer = [z.buffer, h0c.buffer];
-      if (P.forest && state.landcover) {
-        const muMap = new Float32Array(N).fill(prm.mu), xiMap = new Float32Array(N).fill(prm.xi);
-        const cls = state.landcover.classes;
-        for (let i = 0; i < N; i++) if (cls[i] === SLS.landcover.FOREST) { muMap[i] = prm.mu + 0.02; xiMap[i] = Math.min(prm.xi, 400); }
-        msg.muMap = muMap; msg.xiMap = xiMap; transfer.push(muMap.buffer, xiMap.buffer);
-      }
+      const transfer = [z.buffer, h0c.buffer, muMap.buffer, xiMap.buffer];
       if (P.entrain && P.erodDepth > 0) {
         // Örtü karı: yamaca dik derinlik → düşey; kopma hücrelerinde örtü yok (zaten kopan levha)
         const er = new Float32Array(N), mask = state.release.mask;
@@ -1244,7 +1378,7 @@
             if (await expandDomain(out.edges)) { S.expansions++; continue outer; }
             out = await runWorker(AN().releaseDepth(ctx(), releaseOpts(sc.d0)).h0, prm, false);
           }
-          S.runs[sc.key] = { scenario: sc, params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, source: prm.label }, release: rel.stats, result: out.result, timeline: out.result.frames || null };
+          S.runs[sc.key] = { scenario: sc, params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, source: prm.label, kind: prm.kind, share: prm.share, order: state.params.order, method: state.release.method }, release: rel.stats, result: out.result, timeline: out.result.frames || null };
         }
         break;
       }
@@ -1326,9 +1460,11 @@
       else if (L.id === 'eroded') { values = r.eroded; mask = (i) => r.eroded[i] >= 0.02; }
       else if (L.id === 'hfinal') { values = r.hfinal; mask = null; }
       else { values = r[L.id]; mask = (i) => r.hmax[i] >= 0.05; }
-      SLS.raster.paint(canvas('result'), W, H, values, classes, 215, mask);
+      if (state.colorMode === 'continuous' && L.id !== 'zones') SLS.raster.paintContinuous(canvas('result'), W, H, values, classes, 215, mask);
+      else SLS.raster.paint(canvas('result'), W, H, values, classes, 215, mask);
     }
     mapView.refreshOverlay('result');
+    syncOverlays();
     renderLegend();
   }
 
@@ -1376,6 +1512,11 @@
     mapView.setOverlayVisible('sim', s === 'run' && (S.status === 'running' || tlOn));
     mapView.setOverlayVisible('simPowder', s === 'run' && (S.status === 'running' || tlOn));
     mapView.setOverlayVisible('forest', s === 'params' && state.params.forest);
+    mapView.setOverlayVisible('tclass', s === 'params' && state.showTclass);
+    mapView.setForestPolygonsVisible(s === 'params');
+    const cont = state.colorMode === 'continuous' && S.view !== 'matrix' && S.layer !== 'zones';
+    mapView.setOverlayResampling('result', cont ? 'linear' : 'nearest');
+    mapView.setOverlayResampling('sim', cont ? 'linear' : 'nearest');
     mapView.setPathVisible((s === 'run' || s === 'report') && S.status === 'done');
     renderLegend();
   }
@@ -1549,6 +1690,168 @@
 
 
   // ---------------------------------------------------------------------------
+  function updateForestLayer() {
+    mapView.setForestPolygons(state.forestPolys);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Proje kaydet / aç (IndexedDB + .slsproj)
+  function projectSection() {
+    const Pj = state.project;
+    return `
+      <section class="section">
+        <h4>${esc(t('proj.title'))}</h4>
+        <div class="row">
+          <input class="input" id="projName" placeholder="${esc(t('proj.namePh'))}" value="${esc(Pj.name || state.report.meta.project || '')}">
+          <button class="btn primary" id="projSave" ${state.terrain && !Pj.busy ? '' : 'disabled'}>${esc(t('proj.save'))}</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="projList" style="flex:1">${esc(t('proj.open'))}</button>
+          <button class="btn" id="projExport" ${state.terrain && !Pj.busy ? '' : 'disabled'}>${esc(t('proj.export'))}</button>
+          <label class="btn" for="projImport">${esc(t('proj.import'))}</label><input type="file" id="projImport" accept=".slsproj,.zip" hidden>
+        </div>
+        ${Pj.busy ? `<p class="hint">${esc(t('proj.working'))}</p>` : ''}
+        ${Pj.msg ? `<div class="ok-note">${esc(Pj.msg)}</div>` : ''}
+        ${Pj.err ? `<div class="alert">${esc(Pj.err)}</div>` : ''}
+      </section>`;
+  }
+
+  async function serializeProject() {
+    const tr = state.terrain, S = state.sim, R = state.release;
+    const bins = { terrain: tr.data, releaseMask: R.mask };
+    if (state.landcover) bins.landcover = state.landcover.classes;
+    const runs = {};
+    if (S.status === 'done') {
+      for (const [k, run] of Object.entries(S.runs)) {
+        const r = run.result;
+        for (const f of ['hmax', 'vmax', 'pmax', 'hfinal', 'eroded']) if (r[f]) bins[`${k}_${f}`] = r[f];
+        if (r.powder) { bins[`${k}_p_hmax`] = r.powder.hmax; bins[`${k}_p_vmax`] = r.powder.vmax; bins[`${k}_p_pmax`] = r.powder.pmax; }
+        const frames = (run.timeline || []).map((fr, j) => {
+          bins[`${k}_f${j}_h`] = fr.hq; bins[`${k}_f${j}_v`] = fr.vq; if (fr.pq) bins[`${k}_f${j}_p`] = fr.pq;
+          return { t: fr.t, c0: fr.c0, r0: fr.r0, w: fr.w, h: fr.h, vNow: fr.vNow, mom: fr.mom, pq: !!fr.pq };
+        });
+        runs[k] = { scenario: run.scenario, params: run.params, release: run.release, status: r.status, resultParams: r.params, hasEroded: !!r.eroded, hasPowder: !!r.powder, frames };
+      }
+    }
+    const json = {
+      appVersion: SLS.VERSION, name: state.project.name || state.report.meta.project || t('proj.untitled'), saved: new Date().toISOString(),
+      terrain: { width: tr.width, height: tr.height, cellSize: tr.cellSize, originX: tr.originX, originY: tr.originY, epsg: tr.epsg, source: tr.source, attribution: tr.attribution, bboxWgs84: tr.bboxWgs84 },
+      release: { polys: R.polys, d0: R.d0, d0_30: R.d0_30, d0_300: R.d0_300, method: R.method, zref: R.zref },
+      field: state.field ? { profile: state.field.profile, useGrad: state.field.useGrad } : null,
+      wind: state.wind, snowType: state.snowType, params: state.params, forestPolys: state.forestPolys,
+      assets: state.assets, assetsName: state.assetsName, report: state.report.meta, colorMode: state.colorMode,
+      sim: S.status === 'done' ? { primaryKey: S.primaryKey, view: S.view, layer: S.layer, expansions: S.expansions, runs } : null,
+      step: state.step, basemap: state.basemap,
+    };
+    return SLS.projectStore.pack(json, bins);
+  }
+
+  async function restoreProject(blob) {
+    const { json, bins } = await SLS.projectStore.unpack(blob);
+    tlStop(); stopWorker();
+    const T0 = json.terrain;
+    const terrain = Object.assign({}, T0, { data: bins.terrain });
+    applyTerrain(terrain, false);
+    Object.assign(state, { wind: json.wind, snowType: json.snowType, forestPolys: json.forestPolys || [], assets: json.assets || [], assetsName: json.assetsName || null, colorMode: json.colorMode || 'classes', basemap: json.basemap || 'topo' });
+    state.params = Object.assign(state.params, json.params);
+    state.report.meta = Object.assign(state.report.meta, json.report || {});
+    state.field = json.field ? { id: json.field.profile.id, profile: json.field.profile, sim: SLS.snowpack.toSimulation(json.field.profile), useGrad: json.field.useGrad } : null;
+    Object.assign(state.release, { polys: json.release.polys || [], d0: json.release.d0, d0_30: json.release.d0_30, d0_300: json.release.d0_300, method: json.release.method || 'direct', zref: json.release.zref || 2000, fixedMask: bins.releaseMask, selected: new Set() });
+    if (bins.landcover) {
+      state.landcover = { classes: bins.landcover, stats: SLS.landcover.stats(bins.landcover) };
+      SLS.raster.paintMask(canvas('forest'), terrain.width, terrain.height, bins.landcover, [22, 128, 61], 150, (v) => v === SLS.landcover.FOREST);
+      mapView.setOverlay('forest', canvas('forest'), state.corners, 0.75); mapView.refreshOverlay('forest');
+    }
+    mapView.setBasemap(state.basemap);
+    updateForestLayer();
+    updateRelease(true);
+    if (json.sim) {
+      const S = state.sim = freshSim();
+      for (const [k, rj] of Object.entries(json.sim.runs)) {
+        const result = { hmax: bins[`${k}_hmax`], vmax: bins[`${k}_vmax`], pmax: bins[`${k}_pmax`], hfinal: bins[`${k}_hfinal`], eroded: rj.hasEroded ? bins[`${k}_eroded`] : null,
+          powder: rj.hasPowder ? { hmax: bins[`${k}_p_hmax`], vmax: bins[`${k}_p_vmax`], pmax: bins[`${k}_p_pmax`] } : null, status: rj.status, params: rj.resultParams };
+        const timeline = rj.frames.map((fr, j) => Object.assign({}, fr, { hq: bins[`${k}_f${j}_h`] || new Uint8Array(0), vq: bins[`${k}_f${j}_v`] || new Uint8Array(0), pq: fr.pq ? bins[`${k}_f${j}_p`] : null }));
+        S.runs[k] = { scenario: rj.scenario, params: rj.params, release: rj.release, result, timeline: timeline.length ? timeline : null };
+      }
+      S.expansions = json.sim.expansions || 0;
+      S.layer = json.sim.layer || 'hmax';
+      finalize();
+      if (json.sim.view && (json.sim.view === 'matrix' ? S.zoning : S.runs[json.sim.view])) { S.view = json.sim.view; paintResult(); showPath(); }
+    }
+    if (state.assets.length) computeAssetRisk();
+    state.project.name = json.name;
+    state.step = json.sim ? 'run' : (state.release.mask && state.release.stats.cells ? 'release' : 'terrain');
+    mapView.fitBbox(terrain.bboxWgs84);
+    render(); syncOverlays();
+  }
+
+  async function saveProject() {
+    const Pj = state.project;
+    Pj.busy = true; Pj.msg = null; Pj.err = null; render();
+    try {
+      const blob = await serializeProject();
+      const rec = await SLS.projectStore.save({ id: Pj.id, name: Pj.name || state.report.meta.project || t('proj.untitled'), blob,
+        summary: { version: SLS.VERSION, step: state.step, hasResults: state.sim.status === 'done', grid: `${state.terrain.width}×${state.terrain.height}·${state.terrain.cellSize}m` } });
+      Pj.id = rec.id; Pj.name = rec.name;
+      Pj.msg = t('proj.saved', { mb: n(blob.size / 1048576, 1) });
+    } catch (e) { console.error(e); Pj.err = t('proj.err') + ' (' + e.message + ')'; }
+    Pj.busy = false; render();
+  }
+  async function exportProject() {
+    const Pj = state.project;
+    Pj.busy = true; Pj.msg = null; Pj.err = null; render();
+    try {
+      const blob = await serializeProject();
+      const name = (Pj.name || state.report.meta.project || 'sls_proje').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 50);
+      SLS.avExport.download(blob, `${name}.slsproj`);
+      Pj.msg = t('proj.exported', { mb: n(blob.size / 1048576, 1) });
+      SLS.lastProjectBlob = blob; // otomasyon / test
+    } catch (e) { console.error(e); Pj.err = t('proj.err') + ' (' + e.message + ')'; }
+    Pj.busy = false; render();
+  }
+  async function importProjectFile(file) {
+    if (!file) return;
+    const Pj = state.project;
+    Pj.busy = true; Pj.msg = null; Pj.err = null; render();
+    try { await restoreProject(file); Pj.id = null; Pj.msg = t('proj.loaded'); }
+    catch (e) { console.error(e); Pj.err = t('proj.loadErr') + (e.message === 'not-a-project' ? '' : ' (' + e.message + ')'); }
+    Pj.busy = false; render();
+  }
+  async function openProjectList() {
+    let items = [];
+    try { items = await SLS.projectStore.list(); } catch (e) { state.project.err = t('proj.dbErr'); render(); return; }
+    const el = document.createElement('div');
+    el.className = 'modal-backdrop'; el.id = 'projModal';
+    el.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head"><h2>${esc(t('proj.listTitle'))}</h2><button class="modal-x" type="button" aria-label="${esc(t('notes.close'))}">×</button></div>
+        <div class="modal-body">
+          ${items.length ? `<ul class="setlist proj-list">${items.map((p) => `<li><span><b>${esc(p.name)}</b><small>${esc(new Date(p.updated).toLocaleString())} · ${n(p.size / 1048576, 1)} MB${p.summary ? ' · ' + esc(p.summary.grid) + (p.summary.hasResults ? ' · ' + esc(t('proj.withResults')) : '') : ''}</small></span>
+            <button class="btn" data-popen="${esc(p.id)}">${esc(t('proj.load'))}</button><button class="icon-btn" data-pdel="${esc(p.id)}" title="${esc(t('field.delete'))}">×</button></li>`).join('')}</ul>`
+            : `<p class="hint">${esc(t('proj.none'))}</p>`}
+          <p class="hint">${esc(t('proj.storeHint'))}</p>
+        </div>
+      </div>`;
+    const close = () => el.remove();
+    el.addEventListener('click', async (e) => {
+      if (e.target === el || e.target.closest('.modal-x')) { close(); return; }
+      const o = e.target.closest('[data-popen]'), d = e.target.closest('[data-pdel]');
+      if (o) {
+        close();
+        const Pj = state.project;
+        Pj.busy = true; Pj.msg = null; Pj.err = null; render();
+        try { const rec = await SLS.projectStore.get(o.dataset.popen); await restoreProject(rec.blob); Pj.id = rec.id; Pj.name = rec.name; Pj.msg = t('proj.loaded'); }
+        catch (err) { console.error(err); Pj.err = t('proj.loadErr') + ' (' + err.message + ')'; }
+        Pj.busy = false; render();
+      } else if (d && confirm(t('proj.confirmDel'))) {
+        await SLS.projectStore.remove(d.dataset.pdel);
+        close(); openProjectList();
+      }
+    });
+    document.body.appendChild(el);
+  }
+
+  // ---------------------------------------------------------------------------
   // Zaman çizelgesi: kayıtlı kareleri ileri / geri oynatma
   const TL_RATES = [5, 10, 20, 40];   // oynatma hızı: gerçek saniyede simülasyon saniyesi
   let tlRaf = 0, tlLast = 0, tlSimT = 0, tlBufH = null, tlBufV = null, tlBufP = null;
@@ -1578,10 +1881,11 @@
     if (!tlBufH || tlBufH.length !== N) { tlBufH = new Float32Array(N); tlBufV = new Float32Array(N); tlBufP = new Float32Array(N); }
     const f = F[T.idx], TL = SLS.avTimeline, simCv = canvas('sim');
     TL.decode(f, W, tlBufH, 'h');
+    const paintFn = state.colorMode === 'continuous' ? SLS.raster.paintContinuous : SLS.raster.paint;
     if (T.kind === 'v') {
       TL.decode(f, W, tlBufV, 'v');
-      SLS.raster.paint(simCv, W, H, tlBufV, SLS.raster.RAMPS.velocity.classes, 230, (i) => tlBufH[i] >= 0.05);
-    } else SLS.raster.paint(simCv, W, H, tlBufH, SLS.raster.RAMPS.height.classes, 230);
+      paintFn(simCv, W, H, tlBufV, SLS.raster.RAMPS.velocity.classes, 230, (i) => tlBufH[i] >= 0.05);
+    } else paintFn(simCv, W, H, tlBufH, SLS.raster.RAMPS.height.classes, 230);
     if (!mapView.map.getSource('sim')) mapView.setOverlay('sim', simCv, state.corners, 0.9);
     mapView.refreshOverlay('sim');
     if (f.pq) {
@@ -1723,5 +2027,6 @@
     _applyProfile: (pr) => applyProfile(pr),
     _importKml: (file, purpose) => importKml(file, purpose),
     _tl: { show: (i) => tlShow(i), play: () => tlPlay(), exit: () => tlExit() },
+    _project: { serialize: () => serializeProject(), restore: (b) => restoreProject(b) },
   };
 })(window.SLS = window.SLS || {});

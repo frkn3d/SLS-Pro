@@ -39,6 +39,7 @@
             aoi: { type: 'geojson', data: EMPTY },
             extent: { type: 'geojson', data: EMPTY },
             polys: { type: 'geojson', data: EMPTY },
+            fpolys: { type: 'geojson', data: EMPTY },
             draft: { type: 'geojson', data: EMPTY },
             path: { type: 'geojson', data: EMPTY },
             probe: { type: 'geojson', data: EMPTY },
@@ -53,6 +54,8 @@
             { id: 'aoi-line', type: 'line', source: 'aoi', paint: { 'line-color': '#5cc8ff', 'line-width': 2, 'line-dasharray': [2, 1.5] } },
             { id: 'extent-line', type: 'line', source: 'extent', paint: { 'line-color': '#dff3ff', 'line-width': 1.5 } },
             { id: 'polys-line', type: 'line', source: 'polys', paint: { 'line-color': '#22d3ee', 'line-width': 2 } },
+            { id: 'fpolys-fill', type: 'fill', source: 'fpolys', paint: { 'fill-color': '#16803d', 'fill-opacity': 0.25 } },
+            { id: 'fpolys-line', type: 'line', source: 'fpolys', paint: { 'line-color': '#4ade80', 'line-width': 2, 'line-dasharray': [2, 1] } },
             { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', '$type', 'LineString'], paint: { 'line-color': '#22d3ee', 'line-width': 2, 'line-dasharray': [1.5, 1] } },
             { id: 'path-halo', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 5, 'line-opacity': 0.9 } },
             { id: 'path-line', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#111827', 'line-width': 2.2 } },
@@ -93,7 +96,7 @@
     // ---- Raster bindirmeleri (arazi ızgarası üzerine) ----
     // Sıra (alttan üste): slope, pra, release, result, sim
     _beforeId(id) {
-      const order = ['slope', 'forest', 'pra', 'release', 'result', 'sim', 'simPowder'];
+      const order = ['slope', 'tclass', 'forest', 'pra', 'release', 'result', 'sim', 'simPowder'];
       for (let k = order.indexOf(id) + 1; k < order.length; k++) if (this.map.getLayer(order[k])) return order[k];
       return 'aoi-fill';
     }
@@ -117,6 +120,14 @@
       if (this.map.getSource(id)) this.map.removeSource(id);
     }
     setOverlayVisible(id, on) { if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
+    setOverlayResampling(id, mode) { if (this.map.getLayer(id)) this.map.setPaintProperty(id, 'raster-resampling', mode); }
+    setForestPolygons(rings) {
+      this.map.getSource('fpolys').setData({
+        type: 'FeatureCollection',
+        features: (rings || []).map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...r, r[0]]] } })),
+      });
+    }
+    setForestPolygonsVisible(on) { for (const id of ['fpolys-fill', 'fpolys-line']) this.map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
     setOverlayOpacity(id, v) { if (this.map.getLayer(id)) this.map.setPaintProperty(id, 'raster-opacity', v); }
 
     setExtent(corners) {

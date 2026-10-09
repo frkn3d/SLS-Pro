@@ -4,9 +4,39 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.5.0';
+  SLS.VERSION = '0.6.0';
 
   const RELEASES = [
+    {
+      version: '0.6.0',
+      date: '2026-10-10',
+      tr: {
+        title: 'İkinci derece çözücü, RAMMS sürtünme tablosu, İsviçre kopma kalınlığı, proje kaydetme',
+        items: [
+          'İkinci derece sayısal yöntem (MUSCL-MC + HLL + Heun/SSP-RK2) varsayılan oldu: oluk testinde 10 m hücrede kaçış hatası %10 → %5, hız hatası %24 → %13; 5 m hücrede kaçış hatası %2,6.',
+          'Sürtünme parametreleri RAMMS::AVALANCHE kılavuzundaki MuXi tablosundan hücre bazında atanır: arazi sınıfı (açık yamaç / kanal / oluk / düz) × kot bandı × hacim sınıfı × tekerrür süresi (10, 30, 100, 300 yıl).',
+          'Arazi sınıflandırması (eğim + topoğrafik konum indeksi) haritada gösterilebilir; kot sınırları bölgeye göre ayarlanabilir.',
+          'Kopma kalınlığı için İsviçre yöntemi: (ΔHS₃ + kot gradyanı + rüzgâr) · f(ψ), f(ψ) = 0,291 / (sin ψ − 0,202 cos ψ) (Salm vd. 1990); saha profili çukur eğimine göre ölçeklenir.',
+          'Orman poligonu çizimi ve KML/KMZ ile orman alanı (μ +0,02, ξ ≤ 400).',
+          'Proje kaydetme / açma (tarayıcıda) ve .slsproj dosyası olarak dışa / içe aktarma; sonuçlar ve zaman çizelgesi dahil.',
+          'Sürekli renk skalası ve yumuşatılmış çizim seçeneği; zaman çizelgesi kayıt aralığı ayarı; sayısal yöntem seçimi.',
+          'Kalibrasyon setleri tekdüze değer veya RAMMS tablosu üzerinde ölçek çarpanı olarak saklanabilir.',
+        ],
+      },
+      en: {
+        title: 'Second-order solver, RAMMS friction table, Swiss fracture depth, project saving',
+        items: [
+          'Second-order numerical method (MUSCL-MC + HLL + Heun/SSP-RK2) is now the default: in the gully test runout error at 10 m drops from 10% to 5% and speed error from 24% to 13%; runout error at 5 m is 2.6%.',
+          'Friction parameters are assigned per cell from the MuXi table of the RAMMS::AVALANCHE manual: terrain class (open slope / channelled / gully / flat) × elevation band × volume class × return period (10, 30, 100, 300 years).',
+          'Terrain classification (slope + topographic position index) can be shown on the map; elevation limits can be adjusted to the region.',
+          'Swiss method for fracture depth: (ΔHS₃ + elevation gradient + wind) · f(ψ), f(ψ) = 0.291 / (sin ψ − 0.202 cos ψ) (Salm et al. 1990); field profiles are scaled by the pit slope.',
+          'Forest polygons can be drawn or imported from KML/KMZ (μ +0.02, ξ ≤ 400).',
+          'Project save / open (in the browser) and export / import as an .slsproj file, including results and timeline.',
+          'Continuous colour scale and smooth rendering option; timeline recording interval; numerical method choice.',
+          'Calibration sets can store a uniform value or scale factors applied to the RAMMS table.',
+        ],
+      },
+    },
     {
       version: '0.5.0',
       date: '2026-10-10',

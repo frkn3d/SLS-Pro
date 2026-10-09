@@ -39,6 +39,8 @@
     const W = o.width, H = o.height, N = W * H, dx = o.dx;
     const p = Object.assign({}, DEFAULTS, o.params || {});
     const z = o.z;
+    // İsteğe bağlı hücre bazlı sürtünme (örn. orman); yoksa sabit μ, ξ
+    const muMap = o.muMap || null, xiMap = o.xiMap || null;
 
     const wall = new Uint8Array(N);
     for (let i = 0; i < N; i++) if (!Number.isFinite(z[i])) wall[i] = 1;
@@ -192,9 +194,10 @@
           let sNew = 0;
           if (s > 0) {
             const c2 = cos2[i];
-            const s1 = Math.max(0, s - dt * mu * G * c2);                // Coulomb
+            const muI = muMap ? muMap[i] : mu, xiI = xiMap ? xiMap[i] : xi;
+            const s1 = Math.max(0, s - dt * muI * G * c2);               // Coulomb
             // türbülans: s = s1 − dt·g·s²/(ξ h cos²θ) kapalı çözümü (koşulsuz kararlı, kararlı halde tam)
-            sNew = 2 * s1 / (1 + Math.sqrt(1 + 4 * dt * G * s1 / (xi * hn * c2)));
+            sNew = 2 * s1 / (1 + Math.sqrt(1 + 4 * dt * G * s1 / (xiI * hn * c2)));
             if (sNew > VMAX) sNew = VMAX;
             const f = sNew / s;
             u *= f; v *= f;

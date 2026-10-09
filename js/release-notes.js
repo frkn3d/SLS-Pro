@@ -4,9 +4,37 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.2.0';
+  SLS.VERSION = '0.3.0';
 
   const RELEASES = [
+    {
+      version: '0.3.0',
+      date: '2026-10-09',
+      tr: {
+        title: 'PDF mühendislik raporu, boykesit ve orman etkisi',
+        items: [
+          'Yeni Rapor adımı: kapak, yönetici özeti, arazi ve model bilgileri, sonuç haritaları, boykesit, tehlike bölgelemesi, mühendislik önerileri, sınırlamalar, kaynakça ve imza bölümü içeren PDF rapor.',
+          'Rapor haritaları doğrudan arazi verisinden çizilir: gölgeli kabartma, eş yükselti eğrileri, UTM koordinatları, ölçek çubuğu ve kuzey oku.',
+          'Mühendislik değerlendirmesi: β noktası, Norveç α-β modeli ile kaçış açısı karşılaştırması ve durdurma seddesi yüksekliği ön tahmini.',
+          'Akış yolu boykesiti: kot, en yüksek hız ve basınç; grafik üzerinde gezinince haritada konum gösterilir.',
+          'Haritada otomatik akış yolu çizgisi.',
+          'Orman etkisi: ESA WorldCover 2021 (10 m) verisiyle ormanlık hücrelerde artırılmış sürtünme; çözücü artık hücre bazlı μ ve ξ destekliyor.',
+          'Rapor bilgileri (proje, konum, hazırlayan, kurum) tarayıcıda hatırlanır.',
+        ],
+      },
+      en: {
+        title: 'PDF engineering report, profile and forest effect',
+        items: [
+          'New Report step: PDF report with cover, executive summary, terrain and model details, result maps, profile, hazard zoning, engineering recommendations, limitations, references and sign-off section.',
+          'Report maps are drawn directly from terrain data: hillshade, contours, UTM coordinates, scale bar and north arrow.',
+          'Engineering assessment: β point, runout-angle comparison with the Norwegian α-β model and a catching-dam height pre-estimate.',
+          'Flow-path profile: elevation, peak speed and pressure; hovering the chart marks the location on the map.',
+          'Automatic flow-path line on the map.',
+          'Forest effect: increased friction in forest cells from ESA WorldCover 2021 (10 m); the solver now supports per-cell μ and ξ.',
+          'Report details (project, location, author, organisation) are remembered in the browser.',
+        ],
+      },
+    },
     {
       version: '0.2.0',
       date: '2026-10-09',

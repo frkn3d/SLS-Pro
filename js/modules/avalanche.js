@@ -14,7 +14,7 @@
     { id: 'release', key: 'ws.step.release' },
     { id: 'params', key: 'ws.step.params' },
     { id: 'run', key: 'ws.step.run' },
-    { id: 'report', key: 'ws.step.report', locked: true },
+    { id: 'report', key: 'ws.step.report' },
   ];
   const CELL_SIZES = [5, 10, 20, 30, 50];
   const D0_OPTIONS = [0.5, 1, 1.5, 2, 2.5];
@@ -66,15 +66,24 @@
       gotoText: '',
       pra: null,
       release: freshRelease(),
-      params: { preset: 'medium', mu: 0.2, xi: 1500, rho: 300, cd: 2, tMax: 300 },
+      params: { preset: 'medium', mu: 0.2, xi: 1500, rho: 300, cd: 2, tMax: 300, forest: false },
+      landcover: null,          // { classes: Uint8Array, stats }
+      lcBusy: false, lcError: null,
       sim: freshSim(),
+      report: { meta: loadMeta(), busy: false, progress: 0, error: null, done: null },
     };
   }
+  const META_KEY = 'sls.reportMeta';
+  function loadMeta() {
+    try { return Object.assign({ project: '', location: '', author: '', org: '', notes: '' }, JSON.parse(localStorage.getItem(META_KEY) || '{}')); }
+    catch (_) { return { project: '', location: '', author: '', org: '', notes: '' }; }
+  }
+  function saveMeta() { try { localStorage.setItem(META_KEY, JSON.stringify(state.report.meta)); } catch (_) { /* yok say */ } }
   function freshRelease() {
     return { polys: [], selected: new Set(), d0: 1, showPra: true, drawingPoly: false, mask: null, h0: null, stats: null };
   }
   function freshSim() {
-    return { status: 'idle', worker: null, live: null, result: null, analysis: null, layer: 'hmax', error: null };
+    return { status: 'idle', worker: null, live: null, result: null, analysis: null, profile: null, layer: 'hmax', error: null };
   }
 
   // Tuval nesneleri (harita bindirmeleri için tekrar kullanılır)
@@ -129,6 +138,7 @@
     if (id === 'terrain') return true;
     if (id === 'release') return !!state.terrain;
     if (id === 'params' || id === 'run') return !!state.terrain && releaseCount() > 0;
+    if (id === 'report') return state.sim.status === 'done';
     return false;
   }
   function goStep(id) {
@@ -145,7 +155,7 @@
     const sb = root.querySelector('#sidebar');
     const scroll = sb.scrollTop;
     const idx = STEPS.findIndex((s) => s.id === state.step);
-    const panel = { terrain: terrainPanel, release: releasePanel, params: paramsPanel, run: runPanel }[state.step]();
+    const panel = { terrain: terrainPanel, release: releasePanel, params: paramsPanel, run: runPanel, report: reportPanel }[state.step]();
 
     sb.innerHTML = `
       <nav class="stepper" aria-label="steps">
@@ -374,6 +384,16 @@
         <p class="hint">${esc(t('par.frictionHint'))}</p>
       </section>
       <section class="section">
+        <h4>${esc(t('par.forest'))}</h4>
+        <label class="toggle"><span>${esc(t('par.forestToggle'))}</span>
+          <span class="switch"><input type="checkbox" id="forestToggle" ${P.forest ? 'checked' : ''} ${state.lcBusy ? 'disabled' : ''}><span></span></span>
+        </label>
+        ${state.lcBusy ? `<p class="hint">${esc(t('par.forestLoading'))}</p>` : ''}
+        ${P.forest && state.landcover ? `<dl class="kv"><dt>${esc(t('par.forestShare'))}</dt><dd>${pct(state.landcover.stats.forestFraction)}</dd></dl>` : ''}
+        ${state.lcError ? `<div class="alert">${esc(state.lcError)}</div>` : ''}
+        <p class="hint">${esc(t('par.forestHint'))}</p>
+      </section>
+      <section class="section">
         <h4>${esc(t('par.flow'))}</h4>
         ${slider('rho', 'par.rho', 150, 500, 10, P.rho, 0, 'kg/m³')}
         ${slider('cd', 'par.cd', 1, 2, 0.1, P.cd, 1, '')}
@@ -459,6 +479,12 @@
         ${A.outflow > 0.01 * A.release ? `<div class="alert">${esc(t('res.outflowWarn', { p: pct(A.outflow / A.release) }))}</div>` : ''}
         ${A.reason === 'tmax' ? `<div class="alert">${esc(t('res.tmaxWarn'))}</div>` : ''}
       </section>
+      ${S.profile ? `
+      <section class="section">
+        <h4>${esc(t('prof.title'))}</h4>
+        <div class="profile-wrap"><canvas id="profileCanvas" aria-label="${esc(t('prof.title'))}"></canvas><div class="profile-tip hidden" id="profileTip"></div></div>
+        <p class="hint">${esc(t('prof.hint'))}</p>
+      </section>` : ''}
       <section class="section">
         <h4>${esc(t('result.export'))}</h4>
         <div class="stack">
@@ -467,8 +493,7 @@
           <button class="btn block" data-exp="pmax">${ICON.download}<span>p_max (.asc)</span></button>
           <button class="btn block" data-exp="zones">${ICON.download}<span>${esc(t('res.zones'))} (.asc)</span></button>
           <button class="btn block" data-exp="summary">${ICON.download}<span>${esc(t('res.summaryJson'))}</span></button>
-          <button class="btn primary block" disabled>${esc(t('res.report'))}</button>
-          <p class="hint" style="margin:0">${esc(t('res.reportSoon'))}</p>
+          <button class="btn primary block" data-goto="report">${esc(t('res.report'))} ${ICON.arrow}</button>
         </div>
       </section>`;
   }
@@ -512,10 +537,11 @@
     } else if (state.step === 'release' || state.step === 'params') {
       html = `<h5>${esc(t('ws.step.release'))}</h5>
         <div class="li"><span class="sw" style="background:#22d3ee"></span>${esc(t('legend.release'))}</div>
-        ${state.step === 'release' && state.release.showPra ? `<div class="li"><span class="sw" style="background:#a78bfa"></span>${esc(t('legend.pra'))}</div>` : ''}`;
+        ${state.step === 'release' && state.release.showPra ? `<div class="li"><span class="sw" style="background:#a78bfa"></span>${esc(t('legend.pra'))}</div>` : ''}
+        ${state.step === 'params' && state.params.forest && state.landcover ? `<div class="li"><span class="sw" style="background:rgb(22,128,61)"></span>${esc(t('lc.tree'))}</div>` : ''}`;
     } else if (state.step === 'run' && (S.status === 'running' || (S.live && S.status !== 'done'))) {
       html = legendHtml(t('legend.flowH'), SLS.raster.RAMPS.height.classes, rangeLabel);
-    } else if (state.step === 'run' && S.status === 'done') {
+    } else if ((state.step === 'run' || state.step === 'report') && S.status === 'done') {
       const L = RESULT_LAYERS.find((l) => l.id === S.layer);
       const ramp = SLS.raster.RAMPS[L.ramp];
       html = legendHtml(`${t(L.key)}${L.ramp === 'zones' ? '' : ' (' + ramp.unit + ')'}`, ramp.classes, rangeLabel);
@@ -629,6 +655,16 @@
       };
     });
 
+    const forestToggle = sb.querySelector('#forestToggle');
+    if (forestToggle) forestToggle.onchange = () => setForest(forestToggle.checked);
+
+    // Rapor
+    sb.querySelectorAll('[data-meta]').forEach((inp) => {
+      inp.oninput = () => { state.report.meta[inp.dataset.meta] = inp.value; saveMeta(); };
+    });
+    const repBtn = sb.querySelector('#reportBtn');
+    if (repBtn) repBtn.onclick = makeReport;
+
     // Simülasyon
     const runBtn = sb.querySelector('#runBtn');
     if (runBtn) runBtn.onclick = startSim;
@@ -636,6 +672,7 @@
     if (stopBtn) stopBtn.onclick = () => { if (state.sim.worker) state.sim.worker.postMessage({ type: 'stop' }); stopBtn.disabled = true; };
     sb.querySelectorAll('[data-rlayer]').forEach((b) => b.onclick = () => { state.sim.layer = b.dataset.rlayer; paintResult(); render(); });
     sb.querySelectorAll('[data-exp]').forEach((b) => b.onclick = () => exportResult(b.dataset.exp));
+    bindProfile(sb);
   }
 
   // ---------------------------------------------------------------------------
@@ -663,10 +700,13 @@
       const { slope, aspect } = SLS.terrain.slopeAspect(terrain);
       const stats = SLS.terrain.stats(terrain, slope);
       stopWorker();
-      Object.assign(state, { terrain, stats, slope, aspect, release: freshRelease(), sim: freshSim() });
+      Object.assign(state, { terrain, stats, slope, aspect, release: freshRelease(), sim: freshSim(), landcover: null, lcError: null });
+      state.params.forest = false;
+      state.report.done = null;
+      mapView.setPath(null); mapView.setProbe(null);
       SLS.currentTerrain = terrain;
       state.corners = SLS.terrain.cornersWgs84(terrain);
-      ['slope', 'pra', 'release', 'result', 'sim'].forEach((id) => mapView.removeOverlay(id));
+      ['slope', 'forest', 'pra', 'release', 'result', 'sim'].forEach((id) => mapView.removeOverlay(id));
       computePra();
       updateRelease();
       SLS.raster.paint(canvas('slope'), terrain.width, terrain.height, slope, SLS.terrain.SLOPE_CLASSES, 200);
@@ -751,6 +791,9 @@
       state.sim = freshSim();
       mapView.removeOverlay('result');
       mapView.removeOverlay('sim');
+      mapView.setPath(null);
+      mapView.setProbe(null);
+      state.report.done = null;
     }
   }
 
@@ -793,6 +836,8 @@
         state.sim.status = 'done';
         state.sim.result = m;
         state.sim.analysis = analyze(m);
+        state.sim.profile = flowProfile(m, state.sim.analysis.iTop, state.sim.analysis.iTip);
+        mapView.setPath(state.sim.profile ? state.sim.profile.cells.map(cellLonLat) : null);
         mapView.removeOverlay('sim');
         paintResult();
         mapView.setOverlay('result', canvas('result'), state.corners, 0.85);
@@ -816,10 +861,20 @@
     const z = new Float32Array(tr.data);
     const h0 = new Float32Array(R.h0);
     const P = state.params;
-    worker.postMessage({
+    const msg = {
       type: 'start', width: W, height: H, dx: tr.cellSize, z, h0,
       params: { mu: P.mu, xi: P.xi, rho: P.rho, cd: P.cd, tMax: P.tMax },
-    }, [z.buffer, h0.buffer]);
+    };
+    const transfer = [z.buffer, h0.buffer];
+    if (P.forest && state.landcover) {
+      // Ormanlık hücreler: μ +0,02, ξ en fazla 400 m/s²
+      const muMap = new Float32Array(W * H).fill(P.mu), xiMap = new Float32Array(W * H).fill(P.xi);
+      const cls = state.landcover.classes;
+      for (let i = 0; i < W * H; i++) if (cls[i] === SLS.landcover.FOREST) { muMap[i] = P.mu + 0.02; xiMap[i] = Math.min(P.xi, 400); }
+      msg.muMap = muMap; msg.xiMap = xiMap;
+      transfer.push(muMap.buffer, xiMap.buffer);
+    }
+    worker.postMessage(msg, transfer);
     render();
   }
 
@@ -933,6 +988,9 @@
     mapView.setOverlayOpacity('release', s === 'run' ? 0.45 : 0.85);
     mapView.setOverlayVisible('result', s === 'run' && S.status === 'done');
     mapView.setOverlayVisible('sim', s === 'run' && S.status !== 'done');
+    mapView.setOverlayVisible('forest', s === 'params' && state.params.forest);
+    mapView.setPathVisible((s === 'run' || s === 'report') && S.status === 'done');
+    if (s === 'report' && S.status === 'done') { mapView.setOverlayVisible('result', true); }
     renderLegend();
   }
 
@@ -950,6 +1008,220 @@
       }
     }
     el.textContent = s;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Orman (ESA WorldCover)
+  async function setForest(on) {
+    state.lcError = null;
+    if (on && !state.landcover) {
+      state.lcBusy = true; render();
+      try {
+        const classes = await SLS.landcover.fetchForTerrain(state.terrain);
+        state.landcover = { classes, stats: SLS.landcover.stats(classes) };
+        const tr = state.terrain;
+        SLS.raster.paintMask(canvas('forest'), tr.width, tr.height, classes, [22, 128, 61], 150, (v) => v === SLS.landcover.FOREST);
+        mapView.setOverlay('forest', canvas('forest'), state.corners, 0.75);
+        mapView.refreshOverlay('forest');
+      } catch (e) {
+        console.error(e);
+        state.lcError = t('lc.err');
+        on = false;
+      } finally {
+        state.lcBusy = false;
+      }
+    }
+    state.params.forest = on;
+    invalidateSim();
+    render(); syncOverlays();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Akış yolu: kopma tepesinden akış ucuna, hızlı akış çekirdeğini izleyen en kısa "süre" yolu (Dijkstra)
+  function cellLonLat(i) {
+    const tr = state.terrain, r = (i / tr.width) | 0, c = i - r * tr.width;
+    return SLS.proj.converter(tr.epsg).inverse([tr.originX + (c + 0.5) * tr.cellSize, tr.originY - (r + 0.5) * tr.cellSize]);
+  }
+
+  function flowProfile(res, iTop, iTip) {
+    const tr = state.terrain, W = tr.width, H = tr.height, N = W * H, cs = tr.cellSize, mask = state.release.mask;
+    if (iTop < 0 || iTip < 0 || iTop === iTip) return null;
+    // Akış/kopma dışındaki hücrelerden geçilebilir ama pahalıdır (zirve boşlukları gibi)
+    const inFlow = (i) => res.hmax[i] >= 0.05 || mask[i] === 1;
+    const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+    const hc = [], hi = []; // ikili yığın
+    const push = (c, i) => {
+      let k = hc.length; hc.push(c); hi.push(i);
+      while (k > 0) { const p = (k - 1) >> 1; if (hc[p] <= hc[k]) break; [hc[p], hc[k]] = [hc[k], hc[p]]; [hi[p], hi[k]] = [hi[k], hi[p]]; k = p; }
+    };
+    const pop = () => {
+      const c = hc[0], i = hi[0], lc = hc.pop(), li = hi.pop();
+      if (hc.length) {
+        hc[0] = lc; hi[0] = li; let k = 0;
+        for (;;) {
+          const a = 2 * k + 1, b = a + 1; let m = k;
+          if (a < hc.length && hc[a] < hc[m]) m = a;
+          if (b < hc.length && hc[b] < hc[m]) m = b;
+          if (m === k) break;
+          [hc[m], hc[k]] = [hc[k], hc[m]]; [hi[m], hi[k]] = [hi[k], hi[m]]; k = m;
+        }
+      }
+      return [c, i];
+    };
+    // Çok kaynaklı başlangıç: tüm kopma hücreleri; yüksekte başlamak ucuzdur (0,3 s/m).
+    // Böylece yol, akış ucunu besleyen yamacın tepesinden başlar; kopma halkası boyunca yatay dolaşmaz.
+    const zTop = tr.data[iTop];
+    for (let i = 0; i < N; i++) if (mask[i] === 1) { dist[i] = 0.3 * (zTop - tr.data[i]); push(dist[i], i); }
+    while (hc.length) {
+      const [dc, i] = pop();
+      if (dc > dist[i]) continue;
+      if (i === iTip) break;
+      const r = (i / W) | 0, c = i - r * W;
+      for (let dr = -1; dr <= 1; dr++) for (let dcol = -1; dcol <= 1; dcol++) {
+        if (!dr && !dcol) continue;
+        const rr = r + dr, cc = c + dcol;
+        if (rr < 0 || cc < 0 || rr >= H || cc >= W) continue;
+        const j = rr * W + cc;
+        if (Number.isNaN(tr.data[j])) continue;
+        const len = (dr && dcol ? Math.SQRT2 : 1) * cs;
+        // Süre benzeri maliyet (hızlı çekirdeği izler) × eğim cezası: yana / yokuş yukarı hareket pahalıdır
+        const grade = (tr.data[i] - tr.data[j]) / len;
+        const penalty = (1 + 8 * Math.max(0, 0.3 - grade)) * (inFlow(j) ? 1 : 4);
+        const nd = dc + len / (0.5 * (res.vmax[i] + res.vmax[j]) + 1) * penalty;
+        if (nd < dist[j]) { dist[j] = nd; prev[j] = i; push(nd, j); }
+      }
+    }
+    if (!Number.isFinite(dist[iTip]) || mask[iTip] === 1) return null;
+    const cells = [];
+    for (let i = iTip; i >= 0; i = prev[i]) cells.push(i);
+    cells.reverse();
+    const prof = { cells, d: [], z: [], v: [], p: [], h: [], s: [], release: [] };
+    let acc = 0;
+    cells.forEach((i, k) => {
+      if (k) {
+        const a = cells[k - 1], ra = (a / W) | 0, rb = (i / W) | 0;
+        acc += Math.hypot(rb - ra, (i - rb * W) - (a - ra * W)) * cs;
+      }
+      prof.d.push(acc); prof.z.push(tr.data[i]); prof.v.push(res.vmax[i]); prof.p.push(res.pmax[i]);
+      prof.h.push(res.hmax[i]); prof.s.push(state.slope[i]); prof.release.push(mask[i] === 1);
+    });
+    return prof;
+  }
+
+  // Arayüzdeki boykesit grafiği (koyu tema) + imleç
+  const PROFILE_THEME = { bg: '#131a22', ink: '#e6edf3', ink2: '#a9b6c4', grid: '#233040', axis: '#3a4b60', line: '#5cc8ff', fill: 'rgba(169,182,196,0.16)', band: 'rgba(34,211,238,0.14)', ref: '#6c7d90', font: 'Inter, system-ui, sans-serif', fontSize: 11 };
+  let profileLayout = null;
+  function profileLabels() {
+    return { z: t('prof.z'), v: t('prof.v'), p: t('prof.p'), dist: t('prof.dist'), release: t('legend.release'), ref3: '3 kPa', ref30: '30 kPa' };
+  }
+  function drawProfileUI(cv, hoverIdx) {
+    const prof = state.sim.profile, w = cv.parentElement.clientWidth || 360, h = 330;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    profileLayout = SLS.figures.drawProfile(cv, prof, PROFILE_THEME, profileLabels(), w, h, window.devicePixelRatio || 1);
+    if (hoverIdx != null) {
+      const ctx = cv.getContext('2d'), x = Math.round(profileLayout.X(prof.d[hoverIdx])) + 0.5;
+      ctx.strokeStyle = '#e6edf3'; ctx.lineWidth = 1;
+      const L = profileLayout.panels;
+      ctx.beginPath(); ctx.moveTo(x, L[0].top); ctx.lineTo(x, L[L.length - 1].bot); ctx.stroke();
+      const vals = [prof.z[hoverIdx], prof.v[hoverIdx], prof.p[hoverIdx]];
+      L.forEach((P, k) => {
+        ctx.beginPath(); ctx.arc(x, P.Y(vals[k]), 4, 0, Math.PI * 2);
+        ctx.fillStyle = k ? '#5cc8ff' : '#a9b6c4'; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = '#131a22'; ctx.stroke();
+      });
+    }
+  }
+  function bindProfile(sb) {
+    const cv = sb.querySelector('#profileCanvas');
+    if (!cv || !state.sim.profile) return;
+    drawProfileUI(cv, null);
+    const tip = sb.querySelector('#profileTip'), prof = state.sim.profile;
+    const nearest = (x) => {
+      const L = profileLayout, d = (x - L.ML) / (L.cssW - L.ML - L.MR) * L.dMax;
+      let best = 0;
+      for (let i = 1; i < prof.d.length; i++) if (Math.abs(prof.d[i] - d) < Math.abs(prof.d[best] - d)) best = i;
+      return best;
+    };
+    cv.onmousemove = (e) => {
+      const rect = cv.getBoundingClientRect(), x = e.clientX - rect.left;
+      if (x < profileLayout.ML - 4) return;
+      const i = nearest(x);
+      drawProfileUI(cv, i);
+      tip.innerHTML = `<b>${n(prof.d[i])} m</b><span>${esc(t('prof.z'))}</span><i>${n(prof.z[i])} m</i>` +
+        `<span>${esc(t('prof.slope'))}</span><i>${n(prof.s[i], 1)}°</i>` +
+        `<span>h_max</span><i>${n(prof.h[i], 1)} m</i><span>v_max</span><i>${n(prof.v[i], 1)} m/s</i><span>p_max</span><i>${n(prof.p[i])} kPa</i>`;
+      tip.classList.remove('hidden');
+      const px = profileLayout.X(prof.d[i]);
+      tip.style.left = (px > rect.width / 2 ? px - tip.offsetWidth - 10 : px + 10) + 'px';
+      mapView.setProbe(cellLonLat(prof.cells[i]));
+    };
+    cv.onmouseleave = () => { drawProfileUI(cv, null); tip.classList.add('hidden'); mapView.setProbe(null); };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5) Rapor
+  function reportPanel() {
+    const Rp = state.report, M = Rp.meta;
+    const field = (k, key, ph) => `
+      <label class="field"><span>${esc(t(key))}</span>
+        <input class="input" data-meta="${k}" value="${esc(M[k])}" placeholder="${esc(ph ? t(ph) : '')}"></label>`;
+    return `
+      <section class="section">
+        <h2>${esc(t('rep.title'))}</h2>
+        <p class="muted">${esc(t('rep.intro'))}</p>
+      </section>
+      <section class="section">
+        <h4>${esc(t('rep.info'))}</h4>
+        <div class="stack">
+          ${field('project', 'rep.project', 'rep.projectPh')}
+          ${field('location', 'rep.location', 'rep.locationPh')}
+          ${field('author', 'rep.author')}
+          ${field('org', 'rep.org')}
+          <label class="field"><span>${esc(t('rep.notes'))}</span>
+            <textarea class="input textarea" data-meta="notes" rows="3">${esc(M.notes)}</textarea></label>
+        </div>
+      </section>
+      <section class="section">
+        <h4>${esc(t('rep.contents'))}</h4>
+        <ol class="toc">${t('rep.toc').split('|').map((x) => `<li>${esc(x)}</li>`).join('')}</ol>
+        <button class="btn primary block" id="reportBtn" ${Rp.busy ? 'disabled' : ''}>${ICON.download}<span>${esc(t(Rp.busy ? 'rep.building' : 'rep.make'))}</span></button>
+        <div class="progress ${Rp.busy ? '' : 'hidden'}"><div class="track"><div class="fill" id="repFill" style="width:${Math.round(Rp.progress * 100)}%"></div></div></div>
+        ${Rp.error ? `<div class="alert">${esc(Rp.error)}</div>` : ''}
+        ${Rp.done ? `<div class="ok-note">${esc(t('rep.done', { n: Rp.done.pages, no: Rp.done.reportNo }))}</div>` : ''}
+        <p class="hint">${esc(t('rep.hint'))}</p>
+      </section>`;
+  }
+
+  async function makeReport() {
+    const Rp = state.report;
+    Rp.busy = true; Rp.error = null; Rp.progress = 0; Rp.done = null;
+    render();
+    const setP = (f) => { Rp.progress = f; const el = root.querySelector('#repFill'); if (el) el.style.width = Math.round(f * 100) + '%'; };
+    try {
+      await new Promise((r) => setTimeout(r, 30));
+      const tr = state.terrain;
+      const out = await SLS.avalancheReport.build({
+        terrain: tr, terrainStats: state.stats, slope: state.slope, aspect: state.aspect,
+        release: { mask: state.release.mask, stats: state.release.stats, d0: state.release.d0 },
+        params: state.params, result: state.sim.result, analysis: state.sim.analysis, profile: state.sim.profile,
+        landcover: state.params.forest && state.landcover ? { used: true, forestFraction: state.landcover.stats.forestFraction } : { used: false },
+        meta: Rp.meta,
+        sourceName: t('src.' + tr.source.id) + (tr.source.fileName ? ' · ' + tr.source.fileName : ''),
+        onProgress: setP,
+      });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(out.blob); a.download = out.fileName;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      Rp.done = { pages: out.pages, reportNo: out.reportNo, fileName: out.fileName, size: out.blob.size };
+      SLS.lastReport = out; // otomasyon / test
+    } catch (e) {
+      console.error(e);
+      Rp.error = t('rep.err') + (e && e.message ? ' (' + e.message + ')' : '');
+    } finally {
+      Rp.busy = false;
+      render();
+    }
   }
 
   SLS.modules = SLS.modules || {};

@@ -1,5 +1,13 @@
 # Sürüm Notları / Changelog
 
+## 0.3.0 — 2026-10-09 — PDF mühendislik raporu, boykesit ve orman etkisi
+
+- Rapor adımı: kapak, yönetici özeti, arazi/model bilgileri, sonuç haritaları, boykesit, tehlike bölgelemesi, mühendislik önerileri, sınırlamalar, kaynakça ve onay bölümü içeren PDF rapor (Türkçe / İngilizce).
+- Rapor haritaları arazi verisinden çizilir: gölgeli kabartma, eş yükselti eğrileri, UTM koordinatları, ölçek çubuğu, kuzey oku.
+- Mühendislik değerlendirmesi: β noktası, Norveç α-β modeliyle kaçış açısı karşılaştırması, durdurma seddesi ön tahmini.
+- Akış yolu boykesiti (kot, hız, basınç) ve haritada akış yolu; grafik üzerinde gezinince harita konumu işaretlenir.
+- Orman etkisi: ESA WorldCover 2021 (10 m); çözücüde hücre bazlı μ ve ξ.
+
 ## 0.2.0 — 2026-10-09 — Çığ akış simülasyonu
 
 - Voellmy-Salm yoğun çığ çözücüsü: derinlik-ortalamalı sığ akış denklemleri, sonlu hacim (HLL), eğime göre düzeltilmiş yerçekimi ve sürtünme; hesap tarayıcıda arka planda (Web Worker).

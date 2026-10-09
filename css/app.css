@@ -341,3 +341,21 @@ button.step:disabled { cursor: default; opacity: .6; }
 .zones div { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: center; }
 .zones .sw { width: 14px; height: 10px; border-radius: 2px; }
 .zones b { font-weight: 500; font-size: 12.5px; }
+
+/* ---------- Boykesit ve rapor ---------- */
+.profile-wrap { position: relative; margin: 0 -4px; }
+.profile-wrap canvas { display: block; border-radius: 8px; cursor: crosshair; }
+.profile-tip {
+  position: absolute; top: 28px; z-index: 2; pointer-events: none;
+  display: grid; grid-template-columns: auto auto; gap: 2px 10px; padding: 8px 10px;
+  background: rgba(11, 15, 20, .94); border: 1px solid var(--line-2); border-radius: 8px;
+  font-size: 11.5px; color: var(--text-2); white-space: nowrap; box-shadow: var(--shadow);
+}
+.profile-tip b { grid-column: 1 / -1; color: var(--text); font-family: var(--mono); font-weight: 500; margin-bottom: 2px; }
+.profile-tip i { font-style: normal; font-family: var(--mono); color: var(--text); text-align: right; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.field .input { width: 100%; }
+.textarea { height: auto; padding: 8px 10px; resize: vertical; font: inherit; line-height: 1.45; }
+.toc { margin: 0 0 14px; padding-left: 20px; color: var(--text-2); font-size: 12.5px; columns: 2; column-gap: 18px; }
+.toc li { margin-bottom: 3px; break-inside: avoid; }
+.ok-note { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; border: 1px solid rgba(79, 209, 139, .4); background: rgba(79, 209, 139, .08); color: #9be8bd; }

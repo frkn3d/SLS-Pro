@@ -14,9 +14,27 @@
     return `PROJCS["${name}",${geog},PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",${fn.toFixed(1)}],PARAMETER["Central_Meridian",${cm.toFixed(1)}],PARAMETER["Scale_Factor",${k}],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]`;
   }
 
+  // epsg.io'dan çekilen tanımlar (bilinmeyen EPSG kodları için)
+  const DYN = new Map();
+  const UNIT = { m: 1, ft: 0.3048, 'us-ft': 1200 / 3937 };
+  /** Bilinmeyen EPSG için proj4 tanımını epsg.io'dan alır ve kaydeder. */
+  async function fetchDef(epsg) {
+    epsg = Number(epsg);
+    if (describe(epsg)) return describe(epsg);
+    const r = await fetch(`https://epsg.io/${epsg}.proj4`);
+    if (!r.ok) throw new Error('epsg ' + epsg);
+    const def = (await r.text()).trim();
+    if (!/^\+proj=/.test(def)) throw new Error('epsg ' + epsg);
+    const um = def.match(/\+units=([\w-]+)/), geog = /\+proj=longlat/.test(def);
+    const unitFactor = geog ? null : UNIT[um ? um[1] : 'm'] || null;
+    DYN.set(epsg, { epsg, name: 'EPSG:' + epsg, proj4: def, wkt: null, metric: !geog && unitFactor === 1, unitFactor, dynamic: true });
+    return DYN.get(epsg);
+  }
+
   /** EPSG kodu için {proj4, wkt, name} döndürür; desteklenmiyorsa null. */
   function describe(epsg) {
     epsg = Number(epsg);
+    if (DYN.has(epsg)) return DYN.get(epsg);
     // WGS84 / UTM kuzey (326xx) ve güney (327xx)
     if (epsg >= 32601 && epsg <= 32660 || epsg >= 32701 && epsg <= 32760) {
       const south = epsg > 32700;
@@ -48,6 +66,14 @@
         name: `ED50 / UTM ${zone}N`,
         proj4: `+proj=utm +zone=${zone} +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs`,
         wkt: tmWkt(`ED_1950_UTM_Zone_${zone}N`, ED50_GEOG, cm, '0.9996', 0),
+      };
+    }
+    // İsviçre CH1903+ / LV95 (swissALTI3D)
+    if (epsg === 2056) {
+      return {
+        epsg, metric: true, name: 'CH1903+ / LV95',
+        proj4: '+proj=somerc +lat_0=46.9524055555556 +lon_0=7.43958333333333 +k_0=1 +x_0=2600000 +y_0=1200000 +ellps=bessel +towgs84=674.374,15.056,405.346,0,0,0,0 +units=m +no_defs',
+        wkt: 'PROJCS["CH1903+_LV95",GEOGCS["GCS_CH1903+",DATUM["D_CH1903+",SPHEROID["Bessel_1841",6377397.155,299.1528128]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Hotine_Oblique_Mercator_Azimuth_Center"],PARAMETER["False_Easting",2600000.0],PARAMETER["False_Northing",1200000.0],PARAMETER["Scale_Factor",1.0],PARAMETER["Azimuth",90.0],PARAMETER["Longitude_Of_Center",7.439583333333333],PARAMETER["Latitude_Of_Center",46.95240555555556],UNIT["Meter",1.0]]',
       };
     }
     if (epsg === 4326) {
@@ -93,5 +119,5 @@
     return Math.abs(w * h);
   }
 
-  SLS.proj = { describe, utmEpsgFor, converter, lonLatToWorld, approxAreaKm2 };
+  SLS.proj = { describe, fetchDef, utmEpsgFor, converter, lonLatToWorld, approxAreaKm2 };
 })(window.SLS = window.SLS || {});

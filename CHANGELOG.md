@@ -1,5 +1,14 @@
 # Sürüm Notları / Changelog
 
+## 0.7.0 — 2026-10-10 — Açık LiDAR kaynakları, LAS/LAZ, QGIS paketi, GeoTIFF/GeoJSON, paylaşım bağlantısı
+
+- swissALTI3D (İsviçre, 2 m / 0,5 m) ve USGS 3DEP (ABD, 1 m) LiDAR yükseklik kaynakları.
+- LAS / LAZ nokta bulutu içe aktarımı (zemin noktaları, WASM laz-perf).
+- epsg.io ile bilinmeyen EPSG, EPSG'siz WKT ve feet → metre dönüşümü.
+- QGIS paketi (GeoTIFF + GeoJSON + .qml stilleri), tek katman GeoTIFF, bölgeler GeoJSON.
+- Saha profili paylaşım bağlantısı (sunucusuz).
+- Mangeney vd. (2000) baraj yıkılması kıyas testi.
+
 ## 0.6.0 — 2026-10-10 — İkinci derece çözücü, RAMMS sürtünme tablosu, İsviçre kopma kalınlığı, proje kaydetme
 
 - İkinci derece yöntem (MUSCL-MC + HLL + Heun) varsayılan; ızgara bağımlılığı belirgin azaldı (oluk testi: 10 m'de kaçış hatası %10 → %5).

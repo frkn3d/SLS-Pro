@@ -133,6 +133,7 @@
             <button class="btn primary" id="saveBtn">${esc(t('field.save'))}</button>
             <button class="btn" id="useBtn">${esc(t('field.useInSim'))}</button>
             <button class="btn" id="expBtn">${esc(t('field.export'))}</button>
+            <button class="btn" id="linkBtn">${esc(t('field.shareLink'))}</button>
             ${navigator.share ? `<button class="btn" id="shareBtn">${esc(t('field.share'))}</button>` : ''}
             <button class="btn" id="delBtn" ${SP.get(cur.id) ? '' : 'disabled'}>${esc(t('field.remove'))}</button>
           </div>
@@ -217,6 +218,14 @@
       a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     };
+    root.querySelector('#linkBtn').onclick = async () => {
+      try {
+        const url = await SP.shareUrl(cur);
+        if (navigator.share) { try { await navigator.share({ title: cur.name || 'SLS profile', url }); return; } catch (_) { /* kopyalamaya düş */ } }
+        await navigator.clipboard.writeText(url);
+        toast(t('field.linkCopied', { n: url.length }));
+      } catch (e) { console.error(e); toast(t('field.linkErr')); }
+    };
     const sh = root.querySelector('#shareBtn');
     if (sh) sh.onclick = async () => {
       const f = SP.toFile(cur);
@@ -296,5 +305,11 @@
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   window.addEventListener('resize', () => cur && drawChart(SP.derive(cur)));
   SLS.i18n.apply();
+  // Bağlantıyla gelen profil (saha.html#pz=…)
+  const pz = new URLSearchParams(location.hash.slice(1)).get('pz');
+  if (pz) {
+    SP.decode(pz).then((pr) => { SP.save(pr); cur = JSON.parse(JSON.stringify(pr)); render(); toast(t('field.imported', { n: 1 })); history.replaceState(null, '', location.pathname); })
+      .catch(() => toast(t('field.importErr')));
+  }
   render();
 })(window.SLS = window.SLS || {});

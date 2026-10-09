@@ -136,5 +136,49 @@
     return ok;
   }
 
-  SLS.snowpack = { GRAIN, HARDNESS, WETNESS, FORMAT, blank, derive, toSimulation, layerDensity, validate, list, save, remove, get, toFile, fromFile, uid };
+  // ---- Bağlantı ile paylaşım (sunucusuz): JSON → deflate-raw → base64url ----
+  async function encode(pr) {
+    const data = new TextEncoder().encode(JSON.stringify(pr));
+    const cs = new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const u8 = new Uint8Array(await new Response(cs).arrayBuffer());
+    let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function decode(str) {
+    const b = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+    const ds = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    const pr = JSON.parse(await new Response(ds).text());
+    if (validate(pr).length) throw new Error('invalid');
+    return pr;
+  }
+  /** Simülatörde açılan paylaşım bağlantısı */
+  async function shareUrl(pr) {
+    const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+    return `${base}index.html#/avalanche?pz=${await encode(pr)}`;
+  }
+
+  // ---- Bağlantı ile paylaşım (sunucusuz): JSON → deflate-raw → base64url ----
+  async function encode(pr) {
+    const data = new TextEncoder().encode(JSON.stringify(pr));
+    const cs = new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const u8 = new Uint8Array(await new Response(cs).arrayBuffer());
+    let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function decode(str) {
+    const b = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+    const ds = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    const pr = JSON.parse(await new Response(ds).text());
+    if (validate(pr).length) throw new Error('invalid');
+    return pr;
+  }
+  /** Simülatörde açılan paylaşım bağlantısı */
+  async function shareUrl(pr) {
+    const base = location.href.replace(/[^/]*([?#].*)?$/, '');
+    return `${base}index.html#/avalanche?pz=${await encode(pr)}`;
+  }
+
+  SLS.snowpack = { encode, decode, shareUrl, encode, decode, shareUrl, GRAIN, HARDNESS, WETNESS, FORMAT, blank, derive, toSimulation, layerDensity, validate, list, save, remove, get, toFile, fromFile, uid };
 })(window.SLS = window.SLS || {});

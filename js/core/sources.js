@@ -22,6 +22,27 @@
       attribution: 'Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.',
       url: 'https://registry.opendata.aws/copernicus-dem/',
     },
+    swissalti3d: {
+      id: 'swissalti3d',
+      nativeRes: 2,
+      license: 'swisstopo open government data (OGD) — free use with attribution',
+      attribution: 'swissALTI3D © swisstopo (Federal Office of Topography), LiDAR-based DEM 2 m / 0.5 m.',
+      url: 'https://www.swisstopo.admin.ch/en/height-model-swissalti3d',
+    },
+    usgs3dep: {
+      id: 'usgs3dep',
+      nativeRes: 1,
+      license: 'Public domain (U.S. Geological Survey)',
+      attribution: 'USGS 3D Elevation Program (3DEP), U.S. Geological Survey.',
+      url: 'https://www.usgs.gov/3d-elevation-program',
+    },
+    lidar: {
+      id: 'lidar',
+      nativeRes: null,
+      license: 'User-supplied point cloud',
+      attribution: 'User-supplied LiDAR point cloud (LAS/LAZ)',
+      url: null,
+    },
     file: {
       id: 'file',
       nativeRes: null,
@@ -178,8 +199,10 @@
     const img = await tiff.getImage();
     const keys = img.getGeoKeys() || {};
     const epsg = keys.ProjectedCSTypeGeoKey || keys.GeographicTypeGeoKey;
-    const desc = epsg && epsg !== 32767 ? SLS.proj.describe(epsg) : null;
+    let desc = epsg && epsg !== 32767 ? SLS.proj.describe(epsg) : null;
+    if (!desc && epsg && epsg !== 32767) { try { desc = await SLS.proj.fetchDef(epsg); } catch (_) { desc = null; } }
     if (!desc) throw new Error(SLS.i18n.t('err.crs', { epsg: epsg || '?' }));
+    const zf = desc.dynamic && desc.unitFactor && desc.unitFactor !== 1 ? desc.unitFactor : 1;
 
     const W = img.getWidth(), H = img.getHeight();
     const f = Math.max(1, Math.ceil(Math.sqrt((W * H) / SLS.terrain.MAX_CELLS)));
@@ -190,7 +213,7 @@
     const data = new Float32Array(w * h);
     for (let i = 0; i < data.length; i++) {
       const v = band[i];
-      data[i] = (nd !== null && v === nd) || v < -11000 || v > 9000 ? NaN : v;
+      data[i] = (nd !== null && v === nd) || v * zf < -11000 || v * zf > 9000 ? NaN : v * zf;
     }
     const [ox, oy] = img.getOrigin();
     const [rx, ry] = img.getResolution();
@@ -218,6 +241,97 @@
     return finish(grid, out, 'file', { fileName: file.name, nativeEpsg: epsg, downsample: f });
   }
 
+  // ---------------------------------------------------------------------------
+  // 4) swissALTI3D (swisstopo, İsviçre ve Lihtenştayn) — LiDAR tabanlı 2 m / 0,5 m COG, STAC ile
+  // ---------------------------------------------------------------------------
+  const SWISS_STAC = 'https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swissalti3d/items';
+
+  async function fromSwissAlti3d(bbox, cellSize, onProgress, epsg) {
+    const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
+    if (grid.tooBig) throw new Error(SLS.i18n.t('terrain.tooBig'));
+    const gsd = cellSize < 2 ? 0.5 : 2;
+    // STAC araması (sayfalı); her döşeme için en güncel yılı seç
+    const pad = 0.002;
+    let url = `${SWISS_STAC}?bbox=${bbox.west - pad},${bbox.south - pad},${bbox.east + pad},${bbox.north + pad}&limit=100`;
+    const tiles = new Map();
+    for (let guard = 0; url && guard < 50; guard++) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('STAC ' + r.status);
+      const j = await r.json();
+      for (const f of j.features || []) {
+        const m = f.id.match(/swissalti3d_(\d{4})_(\d{4}-\d{4})/);
+        if (!m) continue;
+        const year = +m[1], key = m[2];
+        const asset = Object.values(f.assets).find((a) => /\.tif$/.test(a.href) && Math.abs((a['eo:gsd'] || a.gsd || 0) - gsd) < 1e-6);
+        if (!asset) continue;
+        const prev = tiles.get(key);
+        if (!prev || prev.year < year) tiles.set(key, { year, href: asset.href, key });
+      }
+      const next = (j.links || []).find((l) => l.rel === 'next');
+      url = next ? next.href : null;
+    }
+    if (!tiles.size) throw new Error(SLS.i18n.t('err.noData'));
+    if (gsd === 0.5 && tiles.size > 12) throw new Error(SLS.i18n.t('src.swissTooMany'));
+    const loaded = new Map();
+    let done = 0;
+    await pool([...tiles.values()], 4, async (tl) => {
+      try {
+        const tiff = await GeoTIFF.fromUrl(tl.href, { allowFullFile: false });
+        const img = await tiff.getImage();
+        const [w0, s0, e0, n0] = img.getBoundingBox();
+        const W = img.getWidth(), H = img.getHeight();
+        const [band] = await img.readRasters();
+        const nd = img.getGDALNoData();
+        if (nd !== null) for (let i = 0; i < band.length; i++) if (band[i] === nd) band[i] = NaN;
+        loaded.set(tl.key, { band, w: W, h: H, west: w0, north: n0, rx: (e0 - w0) / W, ry: (n0 - s0) / H, year: tl.year });
+      } catch (e) { console.warn('swissALTI3D', tl.href, e); }
+      onProgress('progress.tiles', ++done / tiles.size);
+    });
+    if (!loaded.size) throw new Error(SLS.i18n.t('err.noData'));
+    const ch = SLS.proj.converter(2056);
+    const sampler = (lon, lat) => {
+      const [E, N] = ch.forward([lon, lat]);
+      const tl = loaded.get(`${Math.floor(E / 1000)}-${Math.floor(N / 1000)}`);
+      if (!tl) return NaN;
+      return bilinear(tl.band, tl.w, tl.h, (E - tl.west) / tl.rx - 0.5, (tl.north - N) / tl.ry - 0.5);
+    };
+    const data = await SLS.terrain.resample(grid, sampler, (f) => onProgress('progress.resample', f));
+    const years = [...new Set([...loaded.values()].map((x) => x.year))].sort();
+    return finish(grid, data, 'swissalti3d', { gsd, tiles: loaded.size, years });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5) USGS 3DEP (ABD) — ImageServer, doğrudan hedef UTM ızgarasında istenir (yeniden örnekleme yok)
+  // ---------------------------------------------------------------------------
+  const USGS_IS = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage';
+
+  async function fromUsgs3dep(bbox, cellSize, onProgress, epsg) {
+    const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
+    if (grid.tooBig) throw new Error(SLS.i18n.t('terrain.tooBig'));
+    const W = grid.width, H = grid.height, cs = grid.cellSize, data = new Float32Array(W * H).fill(NaN);
+    const T = 2000; // istek başına en fazla piksel (sunucu sınırının altında)
+    const jobs = [];
+    for (let r0 = 0; r0 < H; r0 += T) for (let c0 = 0; c0 < W; c0 += T) jobs.push([r0, c0, Math.min(T, H - r0), Math.min(T, W - c0)]);
+    let done = 0;
+    await pool(jobs, 3, async ([r0, c0, h, w]) => {
+      const x0 = grid.originX + c0 * cs, y1 = grid.originY - r0 * cs, x1 = x0 + w * cs, y0 = y1 - h * cs;
+      const q = new URLSearchParams({ bbox: `${x0},${y0},${x1},${y1}`, bboxSR: grid.epsg, imageSR: grid.epsg, size: `${w},${h}`, format: 'tiff', pixelType: 'F32', noDataInterpretation: 'esriNoDataMatchAny', interpolation: 'RSP_BilinearInterpolation', f: 'image' });
+      const r = await fetch(`${USGS_IS}?${q}`);
+      if (!r.ok) throw new Error('3DEP ' + r.status);
+      const tiff = await GeoTIFF.fromArrayBuffer(await r.arrayBuffer());
+      const img = await tiff.getImage();
+      const [band] = await img.readRasters();
+      const nd = img.getGDALNoData();
+      const iw = img.getWidth(), ih = img.getHeight();
+      for (let rr = 0; rr < Math.min(h, ih); rr++) for (let cc = 0; cc < Math.min(w, iw); cc++) {
+        const v = band[rr * iw + cc];
+        data[(r0 + rr) * W + c0 + cc] = (nd !== null && v === nd) || v < -1000 || v > 9000 ? NaN : v;
+      }
+      onProgress('progress.tiles', ++done / jobs.length);
+    });
+    return finish(grid, data, 'usgs3dep', {});
+  }
+
   function finish(grid, data, sourceId, extra) {
     const src = SOURCES[sourceId];
     const t = {
@@ -234,5 +348,5 @@
     return t;
   }
 
-  SLS.sources = { SOURCES, fromTerrarium, fromCopernicus, fromFile, serverAvailable, TERRARIUM_URL };
+  SLS.sources = { SOURCES, fromTerrarium, fromCopernicus, fromFile, fromSwissAlti3d, fromUsgs3dep, finish, serverAvailable, TERRARIUM_URL };
 })(window.SLS = window.SLS || {});

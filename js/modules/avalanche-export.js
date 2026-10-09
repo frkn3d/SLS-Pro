@@ -118,5 +118,153 @@
     return blob;
   }
 
-  SLS.avExport = { download, asc, zoneRaster, summaryJson, kmz };
+  // ---------------------------------------------------------------------------
+  // GeoTIFF, GeoJSON ve QGIS paketi
+  function geotiff(terrain, data, name) {
+    download(SLS.geotiffWriter.write(terrain, data), name + '.tif');
+  }
+
+  const ZONE_LABEL = () => ({ 1: t('zone.yellowM'), 2: t('zone.blueM'), 3: t('zone.redM') });
+  const ZONE_HEXC = { 1: '#facc15', 2: '#2563eb', 3: '#dc2626' };
+
+  function zoneCodes(ctx) {
+    if (ctx.zoning) return ctx.zoning;
+    const r = ctx.runs[ctx.primaryKey].result, codes = new Uint8Array(r.pmax.length);
+    for (let i = 0; i < codes.length; i++) codes[i] = SLS.avAnalysis.singleZone(r, i);
+    return codes;
+  }
+
+  function zonesGeoJSON(ctx) {
+    const lab = ZONE_LABEL();
+    return SLS.vectorize.classesToGeoJSON(ctx.terrain, zoneCodes(ctx), [3, 2, 1].map((v) => ({
+      value: v, props: { zone: v, label: lab[v], method: ctx.zoning ? 'T30+T300 intensity-probability matrix' : 'pressure criterion (3 / 30 kPa)', color: ZONE_HEXC[v] },
+    })));
+  }
+
+  function rgbOf(hex) { const n = parseInt(hex.slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; }
+
+  /** QGIS raster stili: paletli (sınıf kodları) */
+  function qmlPalette(entries) {
+    return `<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.28.0" styleCategories="AllStyleCategories">
+  <pipe>
+    <rasterrenderer type="paletted" band="1" opacity="0.8" alphaBand="-1" nodataColor="">
+      <colorPalette>
+${entries.map((e) => `        <paletteEntry value="${e.value}" color="${e.color}" label="${e.label.replace(/[<>&"]/g, '')}" alpha="255"/>`).join('\n')}
+      </colorPalette>
+    </rasterrenderer>
+  </pipe>
+</qgis>`;
+  }
+
+  /** QGIS raster stili: sınıflı sözde renk (eşik değerleri = SLS renk sınıfları) */
+  function qmlRamp(classes) {
+    const items = classes.map((c) => `            <item alpha="255" value="${Number.isFinite(c.max) ? c.max : 1e9}" label="${c.min}${Number.isFinite(c.max) ? ' – ' + c.max : '+'}" color="#${c.color.map((x) => x.toString(16).padStart(2, '0')).join('')}"/>`);
+    return `<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.28.0" styleCategories="AllStyleCategories">
+  <pipe>
+    <rasterrenderer type="singlebandpseudocolor" band="1" opacity="0.8" alphaBand="-1" classificationMin="${classes[0].min}" classificationMax="${classes[classes.length - 1].min}">
+      <rastershader>
+        <colorrampshader colorRampType="DISCRETE" classificationMode="1" clip="0" minimumValue="${classes[0].min}" maximumValue="${classes[classes.length - 1].min}">
+            <item alpha="0" value="${classes[0].min}" label="&lt; ${classes[0].min}" color="#ffffff"/>
+${items.join('\n')}
+        </colorrampshader>
+      </rastershader>
+    </rasterrenderer>
+  </pipe>
+</qgis>`;
+  }
+
+  /** QGIS vektör stili: bölge kodlarına göre kategorik dolgu */
+  function qmlZonesVector() {
+    const lab = ZONE_LABEL();
+    const cats = [3, 2, 1].map((v, k) => `      <category value="${v}" label="${lab[v]}" symbol="${k}" render="true"/>`).join('\n');
+    const syms = [3, 2, 1].map((v, k) => `      <symbol type="fill" name="${k}" alpha="0.55" clip_to_extent="1" force_rhr="0">
+        <layer class="SimpleFill" enabled="1" locked="0" pass="0">
+          <Option type="Map">
+            <Option name="color" type="QString" value="${rgbOf(ZONE_HEXC[v])},255"/>
+            <Option name="outline_color" type="QString" value="${rgbOf(ZONE_HEXC[v])},255"/>
+            <Option name="outline_width" type="QString" value="0.4"/>
+            <Option name="style" type="QString" value="solid"/>
+          </Option>
+        </layer>
+      </symbol>`).join('\n');
+    return `<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.28.0" styleCategories="Symbology">
+  <renderer-v2 type="categorizedSymbol" attr="zone" symbollevels="0" enableorderby="0" forceraster="0">
+    <categories>
+${cats}
+    </categories>
+    <symbols>
+${syms}
+    </symbols>
+  </renderer-v2>
+</qgis>`;
+  }
+
+  function releaseGeoJSON(ctx) {
+    const codes = new Uint8Array(ctx.releaseMask.length);
+    for (let i = 0; i < codes.length; i++) codes[i] = ctx.releaseMask[i] ? 1 : 0;
+    return SLS.vectorize.classesToGeoJSON(ctx.terrain, codes, [{ value: 1, props: { name: 'release area' } }]);
+  }
+
+  function pathGeoJSON(ctx) {
+    if (!ctx.pathCoords) return null;
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'flow path' }, geometry: { type: 'LineString', coordinates: ctx.pathCoords } }] };
+  }
+
+  function assetsGeoJSON(ctx) {
+    if (!ctx.assetRisk || !ctx.assetRisk.length) return null;
+    const geom = (f) => (f.type === 'Point' ? { type: 'Point', coordinates: f.coords }
+      : f.type === 'LineString' ? { type: 'LineString', coordinates: f.coords } : { type: 'Polygon', coordinates: [[...f.coords, f.coords[0]]] });
+    return { type: 'FeatureCollection', features: ctx.assetRisk.map((a) => ({ type: 'Feature', geometry: geom(a.feature),
+      properties: { name: a.name, zone: a.zone, pmax_kpa: +a.pmax.toFixed(2), hmax_m: +a.hmax.toFixed(2), vmax_ms: +a.vmax.toFixed(2), powder_kpa: +a.powderP.toFixed(2), affected_len_m: a.affectedLen, affected_area_m2: a.affectedArea } })) };
+  }
+
+  /** Tüm sonuçlar: GeoTIFF + GeoJSON + QGIS stilleri + DEM, tek zip */
+  async function qgisPackage(ctx) {
+    const ff = await SLS.kml.fflate();
+    const tr = ctx.terrain, files = {};
+    const tif = async (name, data) => { files[name + '.tif'] = [new Uint8Array(await SLS.geotiffWriter.write(tr, data).arrayBuffer()), { level: 6 }]; };
+    const txt = (name, s) => { files[name] = ff.strToU8(s); };
+    const R = SLS.raster.RAMPS;
+    await tif('dem', tr.data);
+    for (const [key, run] of Object.entries(ctx.runs)) {
+      const r = run.result, pre = key === 'S' ? '' : key + '_';
+      await tif(pre + 'hmax_m', r.hmax); txt(pre + 'hmax_m.qml', qmlRamp(R.height.classes));
+      await tif(pre + 'vmax_ms', r.vmax); txt(pre + 'vmax_ms.qml', qmlRamp(R.velocity.classes));
+      await tif(pre + 'pmax_kpa', r.pmax); txt(pre + 'pmax_kpa.qml', qmlRamp(R.pressure.classes));
+      await tif(pre + 'deposit_m', r.hfinal); txt(pre + 'deposit_m.qml', qmlRamp(R.height.classes));
+      if (r.eroded) { await tif(pre + 'eroded_m', r.eroded); txt(pre + 'eroded_m.qml', qmlRamp(R.erosion.classes)); }
+      if (r.powder) { await tif(pre + 'powder_pmax_kpa', r.powder.pmax); txt(pre + 'powder_pmax_kpa.qml', qmlRamp(R.powder.classes)); }
+    }
+    const codes = zoneCodes(ctx), lab = ZONE_LABEL();
+    await tif('zones', codes);
+    txt('zones.qml', qmlPalette([3, 2, 1].map((v) => ({ value: v, color: ZONE_HEXC[v], label: lab[v] }))));
+    txt('zones.geojson', JSON.stringify(zonesGeoJSON(ctx)));
+    txt('zones_poly.qml', qmlZonesVector());
+    txt('release.geojson', JSON.stringify(releaseGeoJSON(ctx)));
+    const pg = pathGeoJSON(ctx); if (pg) txt('flow_path.geojson', JSON.stringify(pg));
+    const ag = assetsGeoJSON(ctx); if (ag) txt('assets_risk.geojson', JSON.stringify(ag));
+    const d = SLS.proj.describe(tr.epsg);
+    txt('README.txt', [
+      `SLS Pro ${SLS.VERSION} — ${ctx.title}`,
+      `CRS: EPSG:${tr.epsg} (${d ? d.name : ''}) · cell ${tr.cellSize} m · ${tr.width}×${tr.height}`,
+      `Analysis: ${ctx.mode === 'dual' ? 'T30 + T300 zoning matrix' : 'single scenario'} · complete: ${ctx.complete ? 'yes' : 'NO — incomplete analysis'}`,
+      '',
+      'Rasters (GeoTIFF, Float32, nodata -9999): dem, hmax_m, vmax_ms, pmax_kpa, deposit_m [eroded_m, powder_pmax_kpa]; prefixes T30_/T300_ per scenario.',
+      'zones.tif (UInt8): 1 yellow, 2 blue, 3 red; zones.geojson: zone polygons (WGS84).',
+      'Each layer has a matching .qml style; QGIS applies it automatically when the layer is added.',
+      'Data attribution: ' + tr.attribution,
+    ].join('\n'));
+    const blob = new Blob([ff.zipSync(files)], { type: 'application/zip' });
+    download(blob, ctx.baseName + '_qgis.zip');
+    return blob;
+  }
+
+  function geojsonZones(ctx) {
+    download(new Blob([JSON.stringify(zonesGeoJSON(ctx))], { type: 'application/geo+json' }), ctx.baseName + '_zones.geojson');
+  }
+
+  SLS.avExport = { download, asc, zoneRaster, summaryJson, kmz, geotiff, qgisPackage, geojsonZones, zonesGeoJSON };
 })(window.SLS = window.SLS || {});

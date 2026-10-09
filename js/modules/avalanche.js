@@ -143,6 +143,8 @@
     const q = new URLSearchParams((location.hash.split('?')[1]) || '');
     const pid = q.get('profile');
     if (pid) { const pr = SLS.snowpack.get(pid); if (pr) applyProfile(pr, true); }
+    const pz = q.get('pz');
+    if (pz) SLS.snowpack.decode(pz).then((pr) => { SLS.snowpack.save(pr); applyProfile(pr); history.replaceState(null, '', '#/avalanche'); }).catch((e) => console.warn('pz', e));
     render();
     SLS.sources.serverAvailable().then((ok) => { state.serverOk = ok; render(); });
   }
@@ -223,13 +225,13 @@
 
   // ---------- 1) Arazi ----------
   function gridPlan() {
-    if (state.source === 'file' || !state.bbox) return null;
+    if (state.source === 'file' || state.source === 'lidar' || !state.bbox) return null;
     return SLS.terrain.planGrid(state.bbox, state.cellSize);
   }
 
   function terrainPanel() {
     const plan = gridPlan();
-    const canFetch = !state.busy && (state.source === 'file' ? !!state.file : !!state.bbox && plan && !plan.tooBig);
+    const canFetch = !state.busy && (state.source === 'file' || state.source === 'lidar' ? !!state.file : !!state.bbox && plan && !plan.tooBig);
     return `
       <section class="section">
         <h2>${esc(t('terrain.title'))}</h2>
@@ -240,10 +242,13 @@
         <div class="src-list">
           ${sourceCard('terrarium', '<span class="tag ok">' + esc(t('src.browser')) + '</span>')}
           ${sourceCard('copernicus', state.serverOk ? '<span class="tag ok">serve.py ✓</span>' : '<span class="tag warn">' + esc(t('src.needsServer')) + '</span>', !state.serverOk)}
+          ${sourceCard('swissalti3d', '<span class="tag ok">LiDAR 2 m · CH</span>')}
+          ${sourceCard('usgs3dep', '<span class="tag ok">LiDAR 1 m · US</span>')}
           ${sourceCard('file', '<span class="tag">' + esc(t('src.local')) + '</span>')}
+          ${sourceCard('lidar', '<span class="tag">LAS / LAZ</span>')}
         </div>
       </section>
-      ${state.source === 'file' ? fileSection() : areaSection(plan)}
+      ${state.source === 'file' ? fileSection() : state.source === 'lidar' ? lidarSection() : areaSection(plan)}
       <section class="section">
         <h4>${esc(t('terrain.cell'))}</h4>
         <div class="seg" role="radiogroup">
@@ -310,6 +315,22 @@
           ${state.file ? `<span class="fn">${esc(state.file.name)} · ${n(state.file.size / 1048576, 1)} MB</span>` : ''}
         </label>
         <p class="hint">${esc(t('terrain.fileNoExpand'))}</p>
+      </section>`;
+  }
+
+  function lidarSection() {
+    return `
+      <section class="section">
+        <h4>${esc(t('src.lidar'))}</h4>
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept=".las,.laz" hidden>
+          <strong>${esc(t('las.pick'))}</strong>
+          <span class="hint" style="margin:0">${esc(t('terrain.file.drop'))}</span>
+          ${state.file ? `<span class="fn">${esc(state.file.name)} · ${n(state.file.size / 1048576, 1)} MB</span>` : ''}
+        </label>
+        <label class="field" style="margin-top:8px"><span>${esc(t('las.epsg'))}</span>
+          <input class="input mono" id="lasEpsg" inputmode="numeric" placeholder="${esc(t('las.epsgPh'))}" value="${esc(state.lasEpsg || '')}"></label>
+        <p class="hint">${esc(t('las.hint'))}</p>
       </section>`;
   }
 
@@ -685,7 +706,7 @@
             ? `<button class="btn danger block" id="stopBtn">${ICON.stop}<span>${esc(t('run.stop'))}</span></button>`
             : `<button class="btn primary block" id="runBtn">${ICON.play}<span>${esc(t(S.status === 'done' ? 'run.rerun' : 'run.start'))}</span></button>`}
         </div>
-        <p class="hint">${esc(t(tr.source.id === 'file' ? 'run.noExpandHint' : 'run.expandHint'))}</p>
+        <p class="hint">${esc(t(['file', 'lidar'].includes(tr.source.id) ? 'run.noExpandHint' : 'run.expandHint'))}</p>
         ${S.error ? `<div class="alert">${esc(S.error)}</div>` : ''}
       </section>
       ${body}`;
@@ -782,12 +803,19 @@
       <section class="section">
         <h4>${esc(t('result.export'))}</h4>
         <div class="stack">
+          <button class="btn block" data-exp="qgis">${ICON.download}<span>${esc(t('exp.qgis'))}</span></button>
           <button class="btn block" data-exp="kmz">${ICON.download}<span>${esc(t('exp.kmz'))}</span></button>
-          <button class="btn block" data-exp="hmax">${ICON.download}<span>h_max (.asc)</span></button>
-          <button class="btn block" data-exp="vmax">${ICON.download}<span>v_max (.asc)</span></button>
-          <button class="btn block" data-exp="pmax">${ICON.download}<span>p_max (.asc)</span></button>
-          <button class="btn block" data-exp="zones">${ICON.download}<span>${esc(t(S.zoning ? 'res.matrix' : 'res.zones'))} (.asc)</span></button>
-          <button class="btn block" data-exp="summary">${ICON.download}<span>${esc(t('res.summaryJson'))}</span></button>
+          <button class="btn block" data-exp="geojson">${ICON.download}<span>${esc(t('exp.geojson'))}</span></button>
+          <button class="btn block" data-exp="tif">${ICON.download}<span>${esc(t('exp.tif'))}</span></button>
+          <details class="calib"><summary>${esc(t('exp.more'))}</summary>
+            <div class="stack" style="margin-top:6px">
+              <button class="btn block" data-exp="hmax">${ICON.download}<span>h_max (.asc)</span></button>
+              <button class="btn block" data-exp="vmax">${ICON.download}<span>v_max (.asc)</span></button>
+              <button class="btn block" data-exp="pmax">${ICON.download}<span>p_max (.asc)</span></button>
+              <button class="btn block" data-exp="zones">${ICON.download}<span>${esc(t(S.zoning ? 'res.matrix' : 'res.zones'))} (.asc)</span></button>
+              <button class="btn block" data-exp="summary">${ICON.download}<span>${esc(t('res.summaryJson'))}</span></button>
+            </div>
+          </details>
           <button class="btn primary block" data-goto="report">${esc(t('res.report'))} ${ICON.arrow}</button>
         </div>
       </section>`;
@@ -804,6 +832,7 @@
         </div>
         <div class="toggles">
           ${state.terrain && state.step === 'terrain' ? toggle('slope', 'layer.slope') : ''}
+          ${state.tclass && (state.step === 'terrain' || state.step === 'params') ? `<label class="toggle"><span>${esc(t('tc.layer'))}</span><span class="switch"><input type="checkbox" id="tclassLayer" ${state.showTclass ? 'checked' : ''}><span></span></span></label>` : ''}
           ${toggle('hillshade', 'layer.hillshade')}
           ${toggle('terrain3d', 'layer.terrain3d')}
         </div>
@@ -832,7 +861,9 @@
     const lg = root.querySelector('#legend');
     let html = '';
     const S = state.sim;
-    if (state.step === 'terrain' && state.terrain && state.layers.slope) {
+    if (state.step === 'terrain' && state.terrain && state.showTclass) {
+      html = `<h5>${esc(t('tc.title'))}</h5>` + ['tc.open', 'tc.channelled', 'tc.gully', 'tc.flat'].map((k, i) => `<div class="li"><span class="sw" style="background:${TC_HEX[i]}"></span>${esc(t(k))}</div>`).join('');
+    } else if (state.step === 'terrain' && state.terrain && state.layers.slope) {
       html = legendHtml(t('legend.slope'), SLS.terrain.SLOPE_CLASSES, (c) => `${c.min}°${c.max >= 90 ? '+' : '–' + c.max + '°'}`);
     } else if (state.step === 'release' || state.step === 'params') {
       html = `<h5>${esc(t('ws.step.release'))}</h5>
@@ -906,6 +937,7 @@
       drop.ondragleave = () => drop.classList.remove('over');
       drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) { state.file = f; state.error = null; render(); } };
     }
+    on('#lasEpsg', 'oninput', (e) => { state.lasEpsg = e.target.value.trim(); });
     on('#fetchBtn', 'onclick', runFetch);
     if (sb.querySelector('#expAsc')) {
       const base = `sls_dem_${state.terrain.epsg}_${state.terrain.cellSize}m`;
@@ -999,7 +1031,8 @@
       invalidateSim(); render();
     });
     on('#forestToggle', 'onchange', (e) => setForest(e.target.checked));
-    on('#tclassToggle', 'onchange', (e) => { state.showTclass = e.target.checked; syncOverlays(); });
+    on('#tclassToggle', 'onchange', (e) => { state.showTclass = e.target.checked; syncOverlays(); render(); });
+    on('#tclassLayer', 'onchange', (e) => { state.showTclass = e.target.checked; syncOverlays(); render(); });
     sb.querySelectorAll('[data-lim]').forEach((inp) => inp.onchange = () => {
       const v = Number(inp.value);
       if (Number.isFinite(v)) { state.params.limits[inp.dataset.lim] = v; invalidateSim(); render(); }
@@ -1071,6 +1104,9 @@
       let terrain;
       if (state.source === 'terrarium') terrain = await SLS.sources.fromTerrarium(state.bbox, state.cellSize, setProgress);
       else if (state.source === 'copernicus') terrain = await SLS.sources.fromCopernicus(state.bbox, state.cellSize, setProgress);
+      else if (state.source === 'swissalti3d') terrain = await SLS.sources.fromSwissAlti3d(state.bbox, state.cellSize, setProgress);
+      else if (state.source === 'usgs3dep') terrain = await SLS.sources.fromUsgs3dep(state.bbox, state.cellSize, setProgress);
+      else if (state.source === 'lidar') terrain = await SLS.las.toTerrain(state.file, { cellSize: state.cellSize, epsg: state.lasEpsg, onProgress: setProgress });
       else terrain = await SLS.sources.fromFile(state.file, state.cellSize, setProgress);
       setProgress('progress.analysis', 0.5);
       await new Promise((r) => setTimeout(r, 20));
@@ -1263,7 +1299,7 @@
     if (state && state.sim && state.sim.worker) { state.sim.worker.terminate(); state.sim.worker = null; }
   }
 
-  const canExpand = () => state.terrain.source.id !== 'file' && state.sim.expansions < MAX_EXPANSIONS;
+  const canExpand = () => !['file', 'lidar'].includes(state.terrain.source.id) && state.sim.expansions < MAX_EXPANSIONS;
 
   /** Tek senaryo çalıştırır. abortOnBoundary: akış alan kenarına ulaşınca erken bırak. */
   function runWorker(h0, prm, abortOnBoundary) {
@@ -1333,7 +1369,7 @@
     if (SLS.terrain.planGrid(nb, tr.cellSize, tr.epsg).tooBig) return false;
     state.sim.expanding = true; render();
     try {
-      const fetcher = tr.source.id === 'copernicus' ? SLS.sources.fromCopernicus : SLS.sources.fromTerrarium;
+      const fetcher = { copernicus: SLS.sources.fromCopernicus, swissalti3d: SLS.sources.fromSwissAlti3d, usgs3dep: SLS.sources.fromUsgs3dep }[tr.source.id] || SLS.sources.fromTerrarium;
       const nt = await fetcher(nb, tr.cellSize, () => {}, tr.epsg);
       const dc = Math.round((tr.originX - nt.originX) / tr.cellSize), dr = Math.round((nt.originY - tr.originY) / tr.cellSize);
       const old = state.release.mask, fm = new Uint8Array(nt.width * nt.height);
@@ -1488,6 +1524,16 @@
     const suffix = state.sim.view && state.sim.view !== 'matrix' && state.sim.view !== 'S' ? '_' + state.sim.view : '';
     try {
       if (kind === 'summary') return E.summaryJson(c);
+      if (kind === 'qgis') return await E.qgisPackage(c);
+      if (kind === 'geojson') return E.geojsonZones(c);
+      if (kind === 'tif') {
+        const S = state.sim;
+        if (S.view === 'matrix') return E.geotiff(state.terrain, S.zoning, `${c.baseName}_zoning_matrix`);
+        const L = RESULT_LAYERS.find((l) => l.id === S.layer) || RESULT_LAYERS[0];
+        const data = L.id === 'zones' ? (() => { const z = new Uint8Array(r.pmax.length); for (let i = 0; i < z.length; i++) z[i] = AN().singleZone(r, i); return z; })()
+          : L.id === 'powder' ? r.powder.pmax : r[L.id];
+        return E.geotiff(state.terrain, data, `${c.baseName}_${L.id}${suffix}`);
+      }
       if (kind === 'kmz') return await E.kmz(c);
       if (kind === 'zones') {
         if (state.sim.zoning) return E.asc(state.terrain, E.zoneRaster(state.sim.zoning), `${c.baseName}_zoning_matrix`);
@@ -1512,7 +1558,7 @@
     mapView.setOverlayVisible('sim', s === 'run' && (S.status === 'running' || tlOn));
     mapView.setOverlayVisible('simPowder', s === 'run' && (S.status === 'running' || tlOn));
     mapView.setOverlayVisible('forest', s === 'params' && state.params.forest);
-    mapView.setOverlayVisible('tclass', s === 'params' && state.showTclass);
+    mapView.setOverlayVisible('tclass', (s === 'params' || s === 'terrain') && state.showTclass);
     mapView.setForestPolygonsVisible(s === 'params');
     const cont = state.colorMode === 'continuous' && S.view !== 'matrix' && S.layer !== 'zones';
     mapView.setOverlayResampling('result', cont ? 'linear' : 'nearest');

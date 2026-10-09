@@ -4,9 +4,39 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.6.0';
+  SLS.VERSION = '0.7.0';
 
   const RELEASES = [
+    {
+      version: '0.7.0',
+      date: '2026-10-10',
+      tr: {
+        title: 'Açık LiDAR kaynakları, LAS/LAZ, QGIS paketi, GeoTIFF/GeoJSON, paylaşım bağlantısı',
+        items: [
+          'Yeni yükseklik kaynakları: swissALTI3D (İsviçre, LiDAR 2 m / 0,5 m) ve USGS 3DEP (ABD, LiDAR 1 m) — tarayıcıdan doğrudan.',
+          'LiDAR nokta bulutu (LAS / LAZ) içe aktarımı: zemin noktalarından yükseklik modeli; LAZ için WASM çözücü (laz-perf).',
+          'Bilinmeyen EPSG kodları epsg.io tanımıyla, EPSG’siz WKT’ler doğrudan okunur; feet tabanlı sistemler metreye ve UTM’e dönüştürülür (GeoTIFF ve LAS/LAZ).',
+          'QGIS paketi: tüm sonuç katmanları GeoTIFF (EPSG gömülü), tehlike bölgeleri / kopma alanı / akış yolu / yapı-yol riski GeoJSON, her katman için otomatik uygulanan QGIS .qml stilleri.',
+          'Tek katman GeoTIFF ve tehlike bölgeleri GeoJSON (delikli çokgenler, RFC 7946) dışa aktarımı.',
+          'Arazi sınıfları (RAMMS) arazi adımında da katman olarak gösterilebilir.',
+          'Saha profili bağlantı ile paylaşılır (sunucusuz): bağlantı açıldığında profil simülatöre veya saha uygulamasına aktarılır.',
+          'Kıyas testi: Mangeney vd. (2000) eğik düzlemde sürtünmeli baraj yıkılması — 2. derece yöntemle 30°/20° durumunda cephe hatası %0,6.',
+        ],
+      },
+      en: {
+        title: 'Open LiDAR sources, LAS/LAZ, QGIS package, GeoTIFF/GeoJSON, share link',
+        items: [
+          'New elevation sources: swissALTI3D (Switzerland, LiDAR 2 m / 0.5 m) and USGS 3DEP (USA, LiDAR 1 m) — directly in the browser.',
+          'LiDAR point cloud (LAS / LAZ) import: elevation model from ground points; WASM decoder (laz-perf) for LAZ.',
+          'Unknown EPSG codes are resolved via epsg.io and WKT without EPSG is read directly; foot-based systems are converted to metres and UTM (GeoTIFF and LAS/LAZ).',
+          'QGIS package: all result layers as GeoTIFF (EPSG embedded), hazard zones / release area / flow path / building-road risk as GeoJSON, with QGIS .qml styles applied automatically per layer.',
+          'Single-layer GeoTIFF and hazard-zone GeoJSON (polygons with holes, RFC 7946) export.',
+          'Terrain classes (RAMMS) can be shown as a layer in the terrain step too.',
+          'Field profiles can be shared by link (serverless): opening the link loads the profile into the simulator or the field app.',
+          'Benchmark: Mangeney et al. (2000) frictional dam break on an incline — front error 0.6% with the 2nd-order method in the 30°/20° case.',
+        ],
+      },
+    },
     {
       version: '0.6.0',
       date: '2026-10-10',

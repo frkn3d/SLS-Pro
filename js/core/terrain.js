@@ -17,8 +17,8 @@
   const MAX_CELLS = 12_000_000;
 
   /** Lon/lat kutusundan UTM ızgara planı çıkarır. */
-  function planGrid(bbox, cellSize) {
-    const epsg = SLS.proj.utmEpsgFor((bbox.west + bbox.east) / 2, (bbox.south + bbox.north) / 2);
+  function planGrid(bbox, cellSize, epsgOverride) {
+    const epsg = epsgOverride || SLS.proj.utmEpsgFor((bbox.west + bbox.east) / 2, (bbox.south + bbox.north) / 2);
     const conv = SLS.proj.converter(epsg);
     const pts = [];
     for (let i = 0; i <= 4; i++) {

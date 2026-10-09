@@ -25,7 +25,8 @@ self.onmessage = (e) => {
 
 function frame() {
   const h = new Float32Array(sim.state.h);
-  self.postMessage({ type: 'frame', h, status: sim.status(), wallMs: performance.now() - wallStart }, [h.buffer]);
+  const ph = sim.state.powder ? new Float32Array(sim.state.powder) : null;
+  self.postMessage({ type: 'frame', h, ph, status: sim.status(), wallMs: performance.now() - wallStart }, ph ? [h.buffer, ph.buffer] : [h.buffer]);
 }
 
 function loop() {
@@ -44,8 +45,10 @@ function loop() {
     frame();
     const r = sim.results();
     const st = Object.assign(r.status, { wallMs: performance.now() - wallStart });
-    self.postMessage({ type: 'done', hmax: r.hmax, vmax: r.vmax, pmax: r.pmax, hfinal: r.hfinal, status: st, params: r.params },
-      [r.hmax.buffer, r.vmax.buffer, r.pmax.buffer, r.hfinal.buffer]);
+    const transfer = [r.hmax.buffer, r.vmax.buffer, r.pmax.buffer, r.hfinal.buffer];
+    if (r.eroded) transfer.push(r.eroded.buffer);
+    if (r.powder) transfer.push(r.powder.hmax.buffer, r.powder.vmax.buffer, r.powder.pmax.buffer);
+    self.postMessage({ type: 'done', hmax: r.hmax, vmax: r.vmax, pmax: r.pmax, hfinal: r.hfinal, eroded: r.eroded, powder: r.powder, status: st, params: r.params }, transfer);
     sim = null;
     return;
   }

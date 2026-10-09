@@ -72,8 +72,8 @@
     return out;
   }
 
-  async function fromTerrarium(bbox, cellSize, onProgress) {
-    const grid = SLS.terrain.planGrid(bbox, cellSize);
+  async function fromTerrarium(bbox, cellSize, onProgress, epsg) {
+    const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
     const z = terrariumZoom((bbox.south + bbox.north) / 2, cellSize);
     const [wx0, wy0] = SLS.proj.lonLatToWorld(bbox.west, bbox.north, z);
     const [wx1, wy1] = SLS.proj.lonLatToWorld(bbox.east, bbox.south, z);
@@ -128,9 +128,9 @@
     } catch (_) { return false; }
   }
 
-  async function fromCopernicus(bbox, cellSize, onProgress) {
+  async function fromCopernicus(bbox, cellSize, onProgress, epsg) {
     if (!(await serverAvailable())) throw new Error(SLS.i18n.t('err.server'));
-    const grid = SLS.terrain.planGrid(bbox, cellSize);
+    const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
     const pad = 0.002;
     const tiles = [];
     for (let lat = Math.floor(bbox.south - pad); lat <= Math.floor(bbox.north + pad); lat++)

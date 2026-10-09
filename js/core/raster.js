@@ -29,6 +29,26 @@
       { min: 30, max: 100, color: [220, 38, 38] },
       { min: 100, max: Infinity, color: [127, 29, 29] },
     ] },
+    // T30 + T300 şiddet–olasılık matrisi kodları (1 sarı, 2 mavi, 3 kırmızı)
+    matrix: { unit: '', classes: [
+      { min: 1, max: 2, color: [250, 204, 21], key: 'zone.yellowM' },
+      { min: 2, max: 3, color: [37, 99, 235], key: 'zone.blueM' },
+      { min: 3, max: Infinity, color: [220, 38, 38], key: 'zone.redM' },
+    ] },
+    // Toz bulutu darbe basıncı (deneysel)
+    powder: { unit: 'kPa', classes: [
+      { min: 0.5, max: 1, color: [233, 213, 255] },
+      { min: 1, max: 3, color: [196, 160, 255] },
+      { min: 3, max: 10, color: [139, 92, 246] },
+      { min: 10, max: Infinity, color: [91, 33, 182] },
+    ] },
+    // Sürüklenen örtü karı derinliği
+    erosion: { unit: 'm', classes: [
+      { min: 0.02, max: 0.1, color: [254, 235, 200] },
+      { min: 0.1, max: 0.3, color: [253, 186, 116] },
+      { min: 0.3, max: 0.6, color: [234, 88, 12] },
+      { min: 0.6, max: Infinity, color: [154, 52, 18] },
+    ] },
     // İsviçre çığ tehlike bölgelemesi, basınç ölçütü (gösterge niteliğinde)
     zones: { unit: 'kPa', classes: [
       { min: 0, max: 3, color: [250, 204, 21], key: 'zone.yellow' },

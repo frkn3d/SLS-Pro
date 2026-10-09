@@ -4,9 +4,45 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.3.0';
+  SLS.VERSION = '0.4.0';
 
   const RELEASES = [
+    {
+      version: '0.4.0',
+      date: '2026-10-09',
+      tr: {
+        title: 'Saha platformu, T30 + T300 bölgeleme, sürüklenme, toz bulutu, KML/KMZ',
+        items: [
+          'Tamamlanmamış analiz denetimi: akış alan sınırına ulaşırsa arazi otomatik genişletilip hesap baştan yapılır (en fazla 3 kez); genişletilemezse sonuç, rapor ve KMZ "tamamlanmamış" olarak işaretlenir.',
+          'Kar sürüklenmesi (entrainment): akış yolundaki örtü karını hıza bağlı olarak bünyesine katar; kütle korunur, aşınma haritası üretilir.',
+          'Toz bulutu (deneysel): yüksek hızlı yoğun akıştan beslenen ikinci katman; hava katılımı, çökelme ve indirgenmiş yerçekimi; basınç haritası. Kalibre edilmemiştir.',
+          'Rüzgâr yüklemesi: rüzgâraltı yamaçlarda kopma kalınlığı artırılır, rüzgârüstünde azaltılır.',
+          'Saha platformu (saha.html): telefonda kar profili girişi — katman kalınlığı, yoğunluk / kar-su eşdeğeri, tane, sertlik, ıslaklık, zayıf katman, GPS, rüzgâr; kaydetme, paylaşma, simülatöre tek tıkla aktarım.',
+          'Saha profili simülasyona aktarılır: kopma kalınlığı (zayıf katman üstü), kota göre kalınlık gradyanı, kar tipi, sürüklenebilir kar, rüzgâr.',
+          'Tehlike bölgeleme modu: T30 ve T300 senaryoları sırayla çalışır, İsviçre şiddet–olasılık matrisiyle birleşik kırmızı/mavi/sarı bölge haritası üretilir.',
+          'Sürtünme parametre kitaplığı: kuru, yoğun ve ıslak kar × tekerrür süresi × hacim sınıfı; kullanıcı kalibrasyon setleri kaydedilip otomatik kullanılabilir.',
+          'KML/KMZ: çalışma alanı ve kopma alanı içe aktarımı; yapı/yol/parsel katmanı için risk tablosu (bölge, p, h, v); sonuçların Google Earth KMZ olarak dışa aktarımı.',
+          'Rapor: saha profili tablosu, senaryo karşılaştırması, bölgeleme matrisi, sürüklenme ve toz bulutu haritaları, yapı/yol risk tablosu, tamamlanmamış analiz uyarısı.',
+          'Çözücü testleri 19’a çıktı: sürüklenme ve toz bulutu kütle dengeleri, eşik davranışı, kenar bazlı taşma takibi.',
+        ],
+      },
+      en: {
+        title: 'Field platform, T30 + T300 zoning, entrainment, powder cloud, KML/KMZ',
+        items: [
+          'Incomplete-analysis control: if the flow reaches the area edge, the terrain is expanded automatically and recomputed (up to 3 times); otherwise the result, report and KMZ are marked "incomplete".',
+          'Snow entrainment: the flow entrains snow cover along its path at a speed-dependent rate; mass is conserved and an erosion map is produced.',
+          'Powder cloud (experimental): a second layer fed by fast dense flow, with air entrainment, settling and reduced gravity; pressure map. Not calibrated.',
+          'Wind loading: fracture depth is increased on lee slopes and reduced on windward slopes.',
+          'Field platform (saha.html): phone-friendly snow-profile entry — layer thickness, density / snow-water equivalent, grain, hardness, wetness, weak layer, GPS, wind; save, share, one-click transfer to the simulator.',
+          'Field profiles feed the simulation: fracture depth (above weak layer), elevation gradient, snow type, erodible snow, wind.',
+          'Hazard-zoning mode: T30 and T300 scenarios run in sequence and are combined with the Swiss intensity–probability matrix into a red/blue/yellow zone map.',
+          'Friction-parameter library: dry, dense and wet snow × return period × volume class; user calibration sets can be saved and applied automatically.',
+          'KML/KMZ: import of study area and release areas; risk table for building/road/parcel layers (zone, p, h, v); export of results as a Google Earth KMZ.',
+          'Report: field-profile table, scenario comparison, zoning matrix, entrainment and powder maps, building/road risk table, incomplete-analysis warning.',
+          'Solver tests increased to 19: entrainment and powder mass balances, threshold behaviour, per-edge outflow tracking.',
+        ],
+      },
+    },
     {
       version: '0.3.0',
       date: '2026-10-09',

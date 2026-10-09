@@ -1,5 +1,17 @@
 # Sürüm Notları / Changelog
 
+## 0.4.0 — 2026-10-09 — Saha platformu, T30 + T300 bölgeleme, sürüklenme, toz bulutu, KML/KMZ
+
+- Tamamlanmamış analiz denetimi: akış sınıra ulaşırsa otomatik alan genişletme ve yeniden hesap (en fazla 3 kez); aksi halde sonuç/rapor/KMZ "tamamlanmamış" olarak işaretlenir.
+- Kar sürüklenmesi (hıza bağlı, kütle korunumlu) ve aşınma haritası.
+- Toz bulutu katmanı (deneysel, kalibre edilmemiş) ve basınç haritası.
+- Rüzgâr yüklemesi (rüzgâraltı / rüzgârüstü kopma kalınlığı düzeltmesi).
+- Saha platformu `saha.html`: kar profili girişi (katman, yoğunluk / SWE, tane, sertlik, ıslaklık, zayıf katman, GPS, rüzgâr), kaydet / paylaş / simülatöre aktar.
+- T30 + T300 çift senaryo ve İsviçre şiddet–olasılık matrisiyle bölgeleme.
+- Kar tipi × tekerrür × hacim sürtünme kitaplığı; kullanıcı kalibrasyon setleri.
+- KML/KMZ içe aktarım (alan, kopma alanı, yapı/yol risk tablosu) ve KMZ dışa aktarım.
+- Rapor ve 19 çözücü testi güncellendi.
+
 ## 0.3.0 — 2026-10-09 — PDF mühendislik raporu, boykesit ve orman etkisi
 
 - Rapor adımı: kapak, yönetici özeti, arazi/model bilgileri, sonuç haritaları, boykesit, tehlike bölgelemesi, mühendislik önerileri, sınırlamalar, kaynakça ve onay bölümü içeren PDF rapor (Türkçe / İngilizce).

@@ -1,0 +1,39 @@
+/* SLS Pro Saha — kar profili girişi */
+.field-page #field { height: auto; }
+.fld { max-width: 1180px; margin: 0 auto; padding: 20px 16px 64px; display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+.fld-list { position: sticky; top: 16px; display: grid; gap: 10px; }
+.fld-list .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.plist { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.pitem { display: grid; gap: 2px; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.pitem:hover { border-color: var(--line-2); }
+.pitem.sel { border-color: var(--accent); background: rgba(92, 200, 255, .06); }
+.pitem .t { font-weight: 600; font-size: 13.5px; }
+.pitem .d { color: var(--text-3); font-size: 12px; font-family: var(--mono); }
+.fld-main { display: grid; gap: 14px; min-width: 0; }
+.fcard { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-2); padding: 16px; }
+.fcard h3 { margin: 0 0 12px; font-size: 14px; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.fgrid .field .input, .fgrid .field .select { width: 100%; }
+.layers { display: grid; gap: 8px; }
+.lrow { display: grid; grid-template-columns: 28px repeat(3, minmax(70px, 1fr)) repeat(3, minmax(64px, .8fr)) auto auto; gap: 6px; align-items: end; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.lrow.weak { border-color: rgba(243, 179, 62, .6); }
+.lrow .no { font-family: var(--mono); color: var(--text-3); font-size: 12px; padding-bottom: 9px; }
+.lrow .field span { font-size: 11px; }
+.lrow .input, .lrow .select { height: 34px; width: 100%; padding: 0 6px; }
+.lrow .wk { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); padding-bottom: 8px; white-space: nowrap; }
+.lrow .acts { display: flex; gap: 4px; padding-bottom: 2px; }
+.icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color: var(--text-2); font-size: 14px; line-height: 1; }
+.icon-btn:hover { color: var(--text); border-color: var(--accent-2); }
+.summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.profile-chart { width: 100%; display: block; margin-top: 12px; border-radius: 8px; }
+.factions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ftoast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; padding: 10px 16px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--accent-2); font-size: 13px; box-shadow: var(--shadow); }
+@media (max-width: 900px) {
+  .fld { grid-template-columns: 1fr; padding: 16px 16px 48px; }
+  .fld-list { position: static; }
+  .plist { max-height: none; }
+  .lrow { grid-template-columns: 24px 1fr 1fr 1fr; }
+  .lrow .grain, .lrow .hard, .lrow .wet { grid-column: span 1; }
+  .lrow .wk { grid-column: 2 / span 2; }
+  .lrow .acts { grid-column: 4; justify-content: flex-end; }
+}

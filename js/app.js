@@ -27,6 +27,15 @@
           <h1>${t('launcher.title')}</h1>
           <p>${t('launcher.subtitle')}</p>
         </div>
+        <a class="core-strip field-link" href="saha.html">
+          <div class="core-icon">${svg('<path d="M4 20V9l8-5 8 5v11"/><path d="M4 13h16M4 17h16"/><path d="M9 20v-5h6v5"/>')}</div>
+          <div>
+            <div class="eyebrow">${t('launcher.fieldEyebrow')}</div>
+            <div class="name">${t('launcher.fieldName')}</div>
+            <div class="desc">${t('launcher.fieldDesc')}</div>
+          </div>
+          <span class="open-arrow">→</span>
+        </a>
         <div class="core-strip">
           <div class="core-icon">${svg('<path d="M3 18l5-8 4 5 3-4 6 7z"/><path d="M3 21h18"/><path d="M12 3v3M8.5 4.5l1 1M15.5 4.5l-1 1"/>')}</div>
           <div>
@@ -61,7 +70,7 @@
   }
 
   function route() {
-    const id = location.hash.replace(/^#\/?/, '');
+    const id = location.hash.replace(/^#\/?/, '').split('?')[0];
     const mod = MODULES.find((m) => m.id === id && m.active);
     if (current) { current.unmount(); current = null; }
     if (mod && SLS.modules[mod.id]) {

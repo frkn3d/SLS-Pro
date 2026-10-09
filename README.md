@@ -2,7 +2,7 @@
 
 Doğal afet simülasyon platformu (HTML5). İlk modül: **Çığ Simülasyonu** — arazi edinimi, kopma alanı, Voellmy-Salm akış simülasyonu, tehlike bölgeleri ve PDF mühendislik raporu.
 
-**Hemen dene:** https://frkn3d.github.io/SLS-Pro/
+**Hemen dene:** https://frkn3d.github.io/SLS-Pro/ · **Saha platformu:** https://frkn3d.github.io/SLS-Pro/saha.html
 
 ## Çalıştırma
 

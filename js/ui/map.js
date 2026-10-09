@@ -42,6 +42,7 @@
             draft: { type: 'geojson', data: EMPTY },
             path: { type: 'geojson', data: EMPTY },
             probe: { type: 'geojson', data: EMPTY },
+            assets: { type: 'geojson', data: EMPTY },
           },
           layers: [
             { id: 'bg', type: 'background', paint: { 'background-color': '#0b0f14' } },
@@ -55,6 +56,9 @@
             { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', '$type', 'LineString'], paint: { 'line-color': '#22d3ee', 'line-width': 2, 'line-dasharray': [1.5, 1] } },
             { id: 'path-halo', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 5, 'line-opacity': 0.9 } },
             { id: 'path-line', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#111827', 'line-width': 2.2 } },
+            { id: 'assets-fill', type: 'fill', source: 'assets', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.25 } },
+            { id: 'assets-line', type: 'line', source: 'assets', filter: ['!=', '$type', 'Point'], paint: { 'line-color': ['get', 'color'], 'line-width': 3 } },
+            { id: 'assets-pt', type: 'circle', source: 'assets', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 6, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 2 } },
             { id: 'probe-pt', type: 'circle', source: 'probe', paint: { 'circle-radius': 6, 'circle-color': '#5cc8ff', 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 2 } },
             { id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 4, 'circle-color': '#0b0f14', 'circle-stroke-color': '#22d3ee', 'circle-stroke-width': 2 } },
           ],
@@ -89,7 +93,7 @@
     // ---- Raster bindirmeleri (arazi ızgarası üzerine) ----
     // Sıra (alttan üste): slope, pra, release, result, sim
     _beforeId(id) {
-      const order = ['slope', 'forest', 'pra', 'release', 'result', 'sim'];
+      const order = ['slope', 'forest', 'pra', 'release', 'result', 'sim', 'simPowder'];
       for (let k = order.indexOf(id) + 1; k < order.length; k++) if (this.map.getLayer(order[k])) return order[k];
       return 'aoi-fill';
     }
@@ -128,6 +132,16 @@
     }
     setPathVisible(on) {
       for (const id of ['path-halo', 'path-line']) this.map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    }
+    /** KML unsurları; her özellik { type, coords, name, color } */
+    setAssets(feats) {
+      const geom = (f) => (f.type === 'Point' ? { type: 'Point', coordinates: f.coords }
+        : f.type === 'LineString' ? { type: 'LineString', coordinates: f.coords }
+          : { type: 'Polygon', coordinates: [[...f.coords, f.coords[0]]] });
+      this.map.getSource('assets').setData({
+        type: 'FeatureCollection',
+        features: (feats || []).map((f) => ({ type: 'Feature', properties: { name: f.name, color: f.color || '#e6edf3' }, geometry: geom(f) })),
+      });
     }
     setProbe(ll) {
       this.map.getSource('probe').setData(ll ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: ll } } : EMPTY);

@@ -4,9 +4,41 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.1.0';
+  SLS.VERSION = '0.2.0';
 
   const RELEASES = [
+    {
+      version: '0.2.0',
+      date: '2026-10-09',
+      tr: {
+        title: 'Çığ akış simülasyonu',
+        items: [
+          'Voellmy-Salm yoğun çığ çözücüsü: derinlik-ortalamalı sığ akış denklemleri, sonlu hacim (HLL), eğime göre düzeltilmiş yerçekimi ve sürtünme.',
+          'Çözücü analitik testlerle doğrulandı: Voellmy limit hızı, Coulomb durma koşulu, kütle korunumu ve kaçış açısı.',
+          'Kopma alanı adımı: eğime göre otomatik aday kopma alanları (tıklayarak seçim), poligon çizimi ve kopma kalınlığı d₀.',
+          'Parametreler adımı: küçük / orta / büyük senaryo ön ayarları; μ, ξ, yoğunluk, basınç katsayısı ve süre ayarları.',
+          'Simülasyon adımı: arka planda (Web Worker) hesap, haritada canlı akış animasyonu, durdurma.',
+          'Sonuç haritaları: en yüksek akış yüksekliği, hız, darbe basıncı, birikim ve İsviçre basınç eşiklerine göre tehlike bölgeleri.',
+          'Sonuç özeti: kaçış mesafesi, α açısı, düşü, etkilenen alan, bölge alanları, kütle dengesi; alan dışına taşma uyarısı.',
+          'QGIS için sonuç dışa aktarımı: h_max, v_max, p_max, tehlike bölgeleri (.asc + .prj) ve özet (.json).',
+          'Adım çubuğu artık tıklanabilir; imleç altında sonuç değerleri gösterilir.',
+        ],
+      },
+      en: {
+        title: 'Avalanche flow simulation',
+        items: [
+          'Voellmy-Salm dense-flow solver: depth-averaged shallow-flow equations, finite volume (HLL), slope-corrected gravity and friction.',
+          'Solver verified against analytic tests: Voellmy terminal speed, Coulomb stopping condition, mass conservation and runout angle.',
+          'Release step: automatic slope-based candidate release areas (click to select), polygon drawing and fracture depth d₀.',
+          'Parameters step: small / medium / large scenario presets; μ, ξ, density, pressure coefficient and duration settings.',
+          'Simulation step: background computation (Web Worker), live flow animation on the map, stop button.',
+          'Result maps: peak flow height, speed, impact pressure, deposit and hazard zones by Swiss pressure thresholds.',
+          'Result summary: runout distance, α angle, vertical drop, affected area, zone areas, mass balance; warning when flow leaves the area.',
+          'Result export for QGIS: h_max, v_max, p_max, hazard zones (.asc + .prj) and summary (.json).',
+          'The step bar is now clickable; result values are shown under the cursor.',
+        ],
+      },
+    },
     {
       version: '0.1.0',
       date: '2026-10-09',

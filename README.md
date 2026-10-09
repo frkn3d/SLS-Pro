@@ -1,6 +1,8 @@
 # SLS Pro
 
-Doğal afet simülasyon platformu (HTML5). İlk modül: **Çığ Simülasyonu** — sürüm 0.1.0 arazi edinimi aşamasını içerir.
+Doğal afet simülasyon platformu (HTML5). İlk modül: **Çığ Simülasyonu** — arazi edinimi, kopma alanı, Voellmy-Salm akış simülasyonu ve tehlike bölgeleri.
+
+**Hemen dene:** https://frkn3d.github.io/SLS-Pro/
 
 ## Çalıştırma
 

@@ -45,6 +45,7 @@
     arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     play: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
     stop: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>',
+    pause: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   };
 
   let root, mapView, state;
@@ -97,6 +98,7 @@
     return {
       status: 'idle', worker: null, live: null, phase: null, runs: {}, primaryKey: null, view: null, layer: 'hmax',
       error: null, expansions: 0, expanding: false, incomplete: false, stopRequested: false, zoning: null, assetRisk: null,
+      tl: { idx: 0, playing: false, rate: 10, kind: 'h', active: false },
     };
   }
   const primaryRun = () => state.sim.runs[state.sim.primaryKey] || null;
@@ -138,6 +140,7 @@
   }
 
   function unmount() {
+    tlStop();
     stopWorker();
     if (mapView) mapView.destroy();
     mapView = null;
@@ -163,6 +166,7 @@
   function goStep(id) {
     if (!stepAvailable(id) || state.busy || state.sim.status === 'running') return;
     if (mapView.drawingPolygon) mapView.cancelPolygon();
+    if (id !== 'run') tlStop();
     state.step = id;
     render();
     syncOverlays();
@@ -671,6 +675,7 @@
           </dl>
           ${A.reason === 'tmax' ? `<div class="alert">${esc(t('res.tmaxWarn'))}</div>` : ''}`}
       </section>
+      ${!matrix && run.timeline && run.timeline.length > 1 ? timelineSection(run) : ''}
       ${run.profile && !matrix ? `
       <section class="section">
         <h4>${esc(t('prof.title'))}${keys.length > 1 ? ` · ${esc(S.view)}` : ''}</h4>
@@ -746,6 +751,11 @@
     } else if (state.step === 'run' && S.status === 'running') {
       html = legendHtml(t('legend.flowH'), SLS.raster.RAMPS.height.classes, rangeLabel);
       if (state.params.powder && powderAllowed()) html += `<div class="li"><span class="sw" style="background:rgb(196,160,255)"></span>${esc(t('legend.cloud'))}</div>`;
+    } else if (state.step === 'run' && S.status === 'done' && S.tl.active && tlFrames()) {
+      const f = tlFrames()[S.tl.idx];
+      html = legendHtml(`${t(S.tl.kind === 'v' ? 'tl.speed' : 'tl.height')} (${S.tl.kind === 'v' ? 'm/s' : 'm'}) · t = ${n(f.t, 1)} s`,
+        SLS.raster.RAMPS[S.tl.kind === 'v' ? 'velocity' : 'height'].classes, rangeLabel);
+      if (f.pq) html += `<div class="li"><span class="sw" style="background:rgb(196,160,255)"></span>${esc(t('legend.cloud'))}</div>`;
     } else if ((state.step === 'run' || state.step === 'report') && S.status === 'done') {
       if (S.view === 'matrix') html = legendHtml(t('res.matrix'), SLS.raster.RAMPS.matrix.classes, rangeLabel);
       else {
@@ -906,15 +916,18 @@
     on('#runBtn', 'onclick', startSim);
     on('#stopBtn', 'onclick', (e) => { state.sim.stopRequested = true; if (state.sim.worker) state.sim.worker.postMessage({ type: 'stop' }); e.currentTarget.disabled = true; });
     sb.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => {
+      tlExit();
+      state.sim.tl.idx = 0;
       state.sim.view = b.dataset.view;
       const r = viewRun();
       if (!RESULT_LAYERS.find((l) => l.id === state.sim.layer && (!l.needs || r.result[l.needs]))) state.sim.layer = 'hmax';
       paintResult(); showPath(); render();
     });
-    sb.querySelectorAll('[data-rlayer]').forEach((b) => b.onclick = () => { state.sim.layer = b.dataset.rlayer; paintResult(); render(); });
+    sb.querySelectorAll('[data-rlayer]').forEach((b) => b.onclick = () => { tlExit(); state.sim.layer = b.dataset.rlayer; paintResult(); render(); });
     sb.querySelectorAll('[data-exp]').forEach((b) => b.onclick = () => exportResult(b.dataset.exp));
     on('#assetFile', 'onchange', (e) => importKml(e.target.files[0], 'assets'));
     bindProfile(sb);
+    bindTimeline(sb);
   }
 
   // ---------------------------------------------------------------------------
@@ -1096,6 +1109,7 @@
   // Simülasyon
   function invalidateSim() {
     if (!state.sim || state.sim.status === 'running') return;
+    tlStop();
     if (state.sim.status === 'done' || state.sim.live) {
       state.sim = freshSim();
       mapView.removeOverlay('result');
@@ -1207,6 +1221,7 @@
   }
 
   async function startSim() {
+    tlStop();
     stopWorker();
     ['result', 'sim', 'simPowder'].forEach((id) => mapView.removeOverlay(id));
     mapView.setPath(null); mapView.setProbe(null); mapView.setAssets([]);
@@ -1229,7 +1244,7 @@
             if (await expandDomain(out.edges)) { S.expansions++; continue outer; }
             out = await runWorker(AN().releaseDepth(ctx(), releaseOpts(sc.d0)).h0, prm, false);
           }
-          S.runs[sc.key] = { scenario: sc, params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, source: prm.label }, release: rel.stats, result: out.result };
+          S.runs[sc.key] = { scenario: sc, params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, source: prm.label }, release: rel.stats, result: out.result, timeline: out.result.frames || null };
         }
         break;
       }
@@ -1356,9 +1371,10 @@
     mapView.setOverlayVisible('pra', s === 'release' && state.release.showPra);
     mapView.setOverlayVisible('release', s !== 'terrain');
     mapView.setOverlayOpacity('release', s === 'run' ? 0.45 : 0.85);
-    mapView.setOverlayVisible('result', (s === 'run' || s === 'report') && S.status === 'done');
-    mapView.setOverlayVisible('sim', s === 'run' && S.status === 'running');
-    mapView.setOverlayVisible('simPowder', s === 'run' && S.status === 'running');
+    const tlOn = S.status === 'done' && S.tl && S.tl.active && s === 'run';
+    mapView.setOverlayVisible('result', S.status === 'done' && (s === 'report' || (s === 'run' && !tlOn)));
+    mapView.setOverlayVisible('sim', s === 'run' && (S.status === 'running' || tlOn));
+    mapView.setOverlayVisible('simPowder', s === 'run' && (S.status === 'running' || tlOn));
     mapView.setOverlayVisible('forest', s === 'params' && state.params.forest);
     mapView.setPathVisible((s === 'run' || s === 'report') && S.status === 'done');
     renderLegend();
@@ -1531,6 +1547,172 @@
     }
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Zaman çizelgesi: kayıtlı kareleri ileri / geri oynatma
+  const TL_RATES = [5, 10, 20, 40];   // oynatma hızı: gerçek saniyede simülasyon saniyesi
+  let tlRaf = 0, tlLast = 0, tlSimT = 0, tlBufH = null, tlBufV = null, tlBufP = null;
+  const CLOUD = [{ min: 0.5, max: Infinity, color: [196, 160, 255] }];
+
+  function tlFrames() {
+    const r = state && state.sim && state.sim.status === 'done' ? viewRun() : null;
+    return r && r.timeline && r.timeline.length > 1 ? r.timeline : null;
+  }
+  function tlStop() {
+    if (tlRaf) cancelAnimationFrame(tlRaf);
+    tlRaf = 0;
+    if (state && state.sim && state.sim.tl) state.sim.tl.playing = false;
+  }
+  function tlExit() {
+    tlStop();
+    if (state.sim.tl) state.sim.tl.active = false;
+    ['sim', 'simPowder'].forEach((id) => mapView.removeOverlay(id));
+    syncOverlays();
+  }
+  function tlShow(idx) {
+    const F = tlFrames();
+    if (!F) return;
+    const T = state.sim.tl, tr = state.terrain, W = tr.width, H = tr.height, N = W * H;
+    T.idx = Math.max(0, Math.min(F.length - 1, idx));
+    T.active = true;
+    if (!tlBufH || tlBufH.length !== N) { tlBufH = new Float32Array(N); tlBufV = new Float32Array(N); tlBufP = new Float32Array(N); }
+    const f = F[T.idx], TL = SLS.avTimeline, simCv = canvas('sim');
+    TL.decode(f, W, tlBufH, 'h');
+    if (T.kind === 'v') {
+      TL.decode(f, W, tlBufV, 'v');
+      SLS.raster.paint(simCv, W, H, tlBufV, SLS.raster.RAMPS.velocity.classes, 230, (i) => tlBufH[i] >= 0.05);
+    } else SLS.raster.paint(simCv, W, H, tlBufH, SLS.raster.RAMPS.height.classes, 230);
+    if (!mapView.map.getSource('sim')) mapView.setOverlay('sim', simCv, state.corners, 0.9);
+    mapView.refreshOverlay('sim');
+    if (f.pq) {
+      TL.decode(f, W, tlBufP, 'p');
+      SLS.raster.paint(canvas('simPowder'), W, H, tlBufP, CLOUD, 140);
+      if (!mapView.map.getSource('simPowder')) mapView.setOverlay('simPowder', canvas('simPowder'), state.corners, 0.55);
+      mapView.refreshOverlay('simPowder');
+    }
+    syncOverlays();
+    tlUpdateUi();
+  }
+  function tlPlay() {
+    const F = tlFrames();
+    if (!F) return;
+    const T = state.sim.tl;
+    if (T.playing) { tlStop(); tlUpdateUi(); return; }
+    if (!T.active || T.idx >= F.length - 1) T.idx = 0;
+    T.playing = true;
+    tlSimT = F[T.idx].t; tlLast = performance.now();
+    tlShow(T.idx);
+    const tick = (now) => {
+      if (!T.playing || state.sim.tl !== T) return;
+      tlSimT += (now - tlLast) / 1000 * T.rate; tlLast = now;
+      let k = T.idx;
+      while (k < F.length - 1 && F[k + 1].t <= tlSimT) k++;
+      if (k !== T.idx) tlShow(k);
+      if (k >= F.length - 1) { T.playing = false; tlUpdateUi(); return; }
+      tlRaf = requestAnimationFrame(tick);
+    };
+    tlRaf = requestAnimationFrame(tick);
+  }
+  function tlUpdateUi() {
+    const F = tlFrames();
+    if (!F) return;
+    const T = state.sim.tl, f = F[T.idx];
+    const q = (id) => root.querySelector('#' + id);
+    if (q('tlSlider')) q('tlSlider').value = T.idx;
+    if (q('tlTime')) q('tlTime').textContent = `t = ${n(f.t, 1)} s / ${n(F[F.length - 1].t, 0)} s`;
+    if (q('tlStat')) q('tlStat').textContent = `${t('tl.vnow')}: ${n(f.vNow, 1)} m/s`;
+    if (q('tlPlay')) { q('tlPlay').innerHTML = T.playing ? ICON.pause : ICON.play; q('tlPlay').title = t(T.playing ? 'tl.pause' : 'tl.play'); }
+    if (q('tlMax')) q('tlMax').disabled = !T.active;
+    tlDrawChart();
+  }
+  /** Anlık en yüksek hız – zaman grafiği (tek seri, tek eksen); tıklayınca o ana gider. */
+  function tlDrawChart() {
+    const cv = root.querySelector('#tlChart'), F = tlFrames();
+    if (!cv || !F) return;
+    const ps = getComputedStyle(cv.parentElement);
+    const w = Math.max(200, cv.parentElement.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight)), h = 78, dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#131a22'; g.fillRect(0, 0, w, h);
+    const ML = 30, MR = 8, MT = 18, MB = 15, pw = w - ML - MR, ph = h - MT - MB;
+    const tEnd = F[F.length - 1].t || 1;
+    let vMax = 1; for (const f of F) if (f.vNow > vMax) vMax = f.vNow;
+    const step = SLS.figures.niceStep(vMax, 2), top = Math.ceil(vMax / step) * step;
+    const X = (tt) => ML + tt / tEnd * pw, Y = (v) => MT + ph - v / top * ph;
+    g.font = '10.5px Inter, system-ui, sans-serif';
+    g.fillStyle = '#a9b6c4'; g.textAlign = 'left'; g.textBaseline = 'top';
+    g.fillText(t('tl.chart'), ML, 2);
+    g.strokeStyle = '#233040'; g.lineWidth = 1; g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let v = 0; v <= top + 1e-9; v += step) {
+      const y = Math.round(Y(v)) + 0.5;
+      g.beginPath(); g.moveTo(ML, y); g.lineTo(w - MR, y); g.stroke();
+      g.fillText(n(v), ML - 4, y);
+    }
+    g.beginPath();
+    F.forEach((f, i) => { const x = X(f.t), y = Y(f.vNow); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.strokeStyle = '#5cc8ff'; g.lineWidth = 2; g.lineJoin = 'round'; g.stroke();
+    g.fillStyle = '#a9b6c4'; g.textBaseline = 'top';
+    g.textAlign = 'left'; g.fillText('0 s', ML, MT + ph + 3);
+    g.textAlign = 'right'; g.fillText(`${n(tEnd, 0)} s`, w - MR, MT + ph + 3);
+    const T = state.sim.tl;
+    if (T.active) {
+      const f = F[T.idx], x = Math.round(X(f.t)) + 0.5;
+      g.strokeStyle = '#e6edf3'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, MT); g.lineTo(x, MT + ph); g.stroke();
+      g.beginPath(); g.arc(x, Y(f.vNow), 4, 0, Math.PI * 2);
+      g.fillStyle = '#5cc8ff'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#131a22'; g.stroke();
+    }
+    cv._layout = { ML, pw, tEnd };
+  }
+  function timelineSection(run) {
+    const F = run.timeline, T = state.sim.tl, f = F[Math.min(T.idx, F.length - 1)];
+    return `
+      <section class="section">
+        <h4>${esc(t('tl.title'))}</h4>
+        <div class="tl-row">
+          <button class="btn tl-play" id="tlPlay" title="${esc(t(T.playing ? 'tl.pause' : 'tl.play'))}">${T.playing ? ICON.pause : ICON.play}</button>
+          <input type="range" class="range" id="tlSlider" min="0" max="${F.length - 1}" step="1" value="${T.idx}" aria-label="${esc(t('tl.title'))}">
+        </div>
+        <div class="tl-meta"><span class="mono" id="tlTime">t = ${n(f.t, 1)} s / ${n(F[F.length - 1].t, 0)} s</span><span class="mono" id="tlStat">${esc(t('tl.vnow'))}: ${n(f.vNow, 1)} m/s</span></div>
+        <canvas id="tlChart" class="tl-chart" aria-label="${esc(t('tl.chart'))}"></canvas>
+        <div class="tl-opts">
+          <div class="seg">${TL_RATES.map((r) => `<button type="button" data-tlrate="${r}" class="${T.rate === r ? 'sel' : ''}">${r}×</button>`).join('')}</div>
+          <div class="seg">
+            <button type="button" data-tlkind="h" class="${T.kind === 'h' ? 'sel' : ''}">${esc(t('tl.height'))}</button>
+            <button type="button" data-tlkind="v" class="${T.kind === 'v' ? 'sel' : ''}">${esc(t('tl.speed'))}</button>
+          </div>
+        </div>
+        <button class="btn block" id="tlMax" style="margin-top:8px" ${T.active ? '' : 'disabled'}>${esc(t('tl.max'))}</button>
+        <p class="hint">${esc(t('tl.hint', { n: F.length }))}</p>
+      </section>`;
+  }
+  function bindTimeline(sb) {
+    const slider = sb.querySelector('#tlSlider');
+    if (!slider) return;
+    sb.querySelector('#tlPlay').onclick = tlPlay;
+    slider.oninput = () => { tlStop(); tlShow(Number(slider.value)); };
+    sb.querySelectorAll('[data-tlrate]').forEach((b) => b.onclick = () => {
+      state.sim.tl.rate = Number(b.dataset.tlrate);
+      sb.querySelectorAll('[data-tlrate]').forEach((x) => x.classList.toggle('sel', x === b));
+    });
+    sb.querySelectorAll('[data-tlkind]').forEach((b) => b.onclick = () => {
+      state.sim.tl.kind = b.dataset.tlkind;
+      sb.querySelectorAll('[data-tlkind]').forEach((x) => x.classList.toggle('sel', x === b));
+      if (state.sim.tl.active) tlShow(state.sim.tl.idx); else renderLegend();
+    });
+    sb.querySelector('#tlMax').onclick = () => { tlExit(); tlUpdateUi(); };
+    const ch = sb.querySelector('#tlChart');
+    ch.onclick = (e) => {
+      const L = ch._layout;
+      if (!L) return;
+      const x = e.clientX - ch.getBoundingClientRect().left;
+      tlStop();
+      tlShow(SLS.avTimeline.indexAt(tlFrames(), Math.max(0, Math.min(1, (x - L.ML) / L.pw)) * L.tEnd));
+    };
+    tlDrawChart();
+  }
+
   SLS.modules = SLS.modules || {};
   SLS.modules.avalanche = {
     mount, unmount,
@@ -1540,5 +1722,6 @@
     _selectPra: (lng, lat) => onMapClick({ lng, lat }),
     _applyProfile: (pr) => applyProfile(pr),
     _importKml: (file, purpose) => importKml(file, purpose),
+    _tl: { show: (i) => tlShow(i), play: () => tlPlay(), exit: () => tlExit() },
   };
 })(window.SLS = window.SLS || {});

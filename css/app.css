@@ -396,3 +396,12 @@ button.step:disabled { cursor: default; opacity: .6; }
 .icon-btn:hover { color: var(--text); border-color: var(--accent-2); }
 .info-note { padding: 10px 12px; border-radius: 8px; font-size: 13px; border: 1px solid rgba(92, 200, 255, .35); background: rgba(92, 200, 255, .07); color: #bfe8ff; }
 .alert.strong { border-color: var(--danger); background: rgba(255, 107, 94, .14); color: #ffd1cc; margin-top: 0; }
+
+/* ---------- Zaman çizelgesi ---------- */
+.tl-row { display: flex; gap: 10px; align-items: center; }
+.tl-play { width: 42px; height: 38px; padding: 0; flex: none; }
+.tl-row .range { flex: 1; }
+.tl-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+.tl-chart { display: block; margin-top: 8px; border-radius: 6px; cursor: pointer; }
+.tl-opts { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; margin-top: 8px; }
+.tl-opts .seg button { height: 30px; font-size: 12px; }

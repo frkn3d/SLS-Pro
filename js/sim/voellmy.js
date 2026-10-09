@@ -59,6 +59,16 @@
     cdP: 1,              // bulut basınç katsayısı
   };
 
+  // Zaman çizelgesi kareleri için 8 bitlik kodlama (ana iş parçacığı da aynı fonksiyonları kullanır)
+  const QUANT = {
+    qh: (h) => (h <= 0.005 ? 0 : Math.max(1, Math.min(255, Math.round(Math.sqrt(Math.min(h, 25) / 25) * 255)))),
+    dh: (q) => (q ? (q / 255) * (q / 255) * 25 : 0),
+    qv: (v) => Math.min(255, Math.round(Math.min(v, 60) / 60 * 255)),
+    dv: (q) => q * 60 / 255,
+    qp: (H) => (H <= 0.5 ? 0 : Math.max(1, Math.min(255, Math.round(Math.sqrt(Math.min(H, 100) / 100) * 255)))),
+    dp: (q) => (q ? (q / 255) * (q / 255) * 100 : 0),
+  };
+
   function createSim(o) {
     const W = o.width, H = o.height, N = W * H, dx = o.dx, A = dx * dx;
     const p = Object.assign({}, DEFAULTS, o.params || {});
@@ -348,6 +358,29 @@
       return dt;
     }
 
+    /** Zaman çizelgesi karesi: etkin bölge kırpılır, h / U / bulut yüksekliği 8 bit kodlanır. */
+    function snapshot() {
+      const b = { c0: D.box.c0, c1: D.box.c1, r0: D.box.r0, r1: D.box.r1 };
+      if (P && P.box.c1 >= 0) {
+        b.c0 = Math.min(b.c0, P.box.c0); b.c1 = Math.max(b.c1, P.box.c1);
+        b.r0 = Math.min(b.r0, P.box.r0); b.r1 = Math.max(b.r1, P.box.r1);
+      }
+      const base = { t, vNow: vNowMax, mom: momentumMax > 0 ? momentum / momentumMax : 0 };
+      if (b.c1 < 0) return Object.assign(base, { c0: 0, r0: 0, w: 0, h: 0, hq: new Uint8Array(0), vq: new Uint8Array(0), pq: null });
+      const c0 = Math.max(0, b.c0), c1 = Math.min(W - 1, b.c1), r0 = Math.max(0, b.r0), r1 = Math.min(H - 1, b.r1);
+      const w = c1 - c0 + 1, hh = r1 - r0 + 1;
+      const hq = new Uint8Array(w * hh), vq = new Uint8Array(w * hh), pq = P ? new Uint8Array(w * hh) : null;
+      for (let r = r0, k = 0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++, k++) {
+          const i = r * W + c, hi = D.h[i];
+          hq[k] = QUANT.qh(hi);
+          if (hi > EPS) vq[k] = QUANT.qv(Math.hypot(D.hu[i], D.hv[i]) / hi / cosT[i]);
+          if (pq) pq[k] = QUANT.qp(P.h[i]);
+        }
+      }
+      return Object.assign(base, { c0, r0, w, h: hh, hq, vq, pq });
+    }
+
     function volume() {
       let v = 0;
       for (let i = 0; i < N; i++) v += D.h[i];
@@ -385,14 +418,14 @@
     }
 
     return {
-      step, status, results, volume, params: p,
+      step, status, results, volume, snapshot, params: p,
       get t() { return t; }, get done() { return done; },
       state: { h: D.h, hu: D.hu, hv: D.hv, cosT, powder: P ? P.h : null },
       stop() { if (!done) { done = true; reason = 'user'; } },
     };
   }
 
-  const api = { createSim, DEFAULTS, G };
+  const api = { createSim, DEFAULTS, G, QUANT };
   root.SLSVoellmy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

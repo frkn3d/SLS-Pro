@@ -93,7 +93,9 @@
       modelEnt: 'Kar sürüklenmesi: yoğun akış, yolundaki örtü karını ė = κ_e·U hızıyla mevcut örtü bitene kadar bünyesine katar; alınan kar durgun kabul edilir ve kütle korunur.',
       modelPow: 'Toz bulutu (deneysel): hızı eşik değerini aşan yoğun akıştan beslenen ikinci bir sığ katman olarak çözülür; hava katılımıyla büyür, çökelir ve indirgenmiş yerçekimiyle hareket eder. Kalibre edilmemiştir.',
       rEnt: 'Sürüklenen kar', rPow: 'Toz bulutu en yüksek basıncı', rPowA: 'Toz bulutu etki alanı (≥ 0,5 kPa)',
-      figEro: 'Şekil {n} — Aşınan örtü karı derinliği (m).', figPow: 'Şekil {n} — Toz bulutu en yüksek basıncı (kPa, deneysel).',
+      figEro: 'Şekil {n} — Aşınan örtü karı derinliği (m).',
+      figSeq: 'Şekil {n} — Akış zaman dizisi: olay süresinin %10, %30, %60’ı ve sonundaki akış yüksekliği (m).',
+      seqNote: 'Kareler hesap sırasında kaydedilmiştir; akış yüksekliği 8 bit kodlamayla saklandığından küçük yuvarlama farkları olabilir.', figPow: 'Şekil {n} — Toz bulutu en yüksek basıncı (kPa, deneysel).',
       powNote: 'Toz bulutu modeli kalibre edilmemiştir; gösterge niteliğindedir.',
       s6M: '6. Tehlike bölgelemesi (T30 + T300 matrisi)', figZM: 'Şekil {n} — Şiddet–olasılık matrisine göre tehlike bölgeleri.',
       mxHead: 'Şiddet \\ Olasılık', mxT30: 'T ≤ 30 yıl', mxT300: '30 < T ≤ 300 yıl',
@@ -194,7 +196,9 @@
       modelEnt: 'Snow entrainment: the dense flow entrains the snow cover on its path at a rate ė = κ_e·U until the cover is exhausted; entrained snow is assumed at rest and mass is conserved.',
       modelPow: 'Powder cloud (experimental): solved as a second shallow layer fed by dense flow above a threshold speed; it grows by air entrainment, settles and moves under reduced gravity. Not calibrated.',
       rEnt: 'Entrained snow', rPow: 'Peak powder-cloud pressure', rPowA: 'Powder footprint (≥ 0.5 kPa)',
-      figEro: 'Figure {n} — Eroded snow-cover depth (m).', figPow: 'Figure {n} — Peak powder-cloud pressure (kPa, experimental).',
+      figEro: 'Figure {n} — Eroded snow-cover depth (m).',
+      figSeq: 'Figure {n} — Flow time sequence: flow height (m) at 10%, 30%, 60% of the event duration and at the end.',
+      seqNote: 'Frames were recorded during the computation; flow height is stored with 8-bit encoding, so small rounding differences may occur.', figPow: 'Figure {n} — Peak powder-cloud pressure (kPa, experimental).',
       powNote: 'The powder-cloud model is not calibrated; indicative only.',
       s6M: '6. Hazard zoning (T30 + T300 matrix)', figZM: 'Figure {n} — Hazard zones by the intensity–probability matrix.',
       mxHead: 'Intensity \\ Probability', mxT30: 'T ≤ 30 yr', mxT300: '30 < T ≤ 300 yr',
@@ -489,6 +493,8 @@
     figs.d = fig({ values: R.hfinal, classes: SLS.raster.RAMPS.height.classes, mask: null, alpha: 200 });
     if (dual && runs.T30) figs.p30 = fig({ values: runs.T30.result.pmax, classes: SLS.raster.RAMPS.pressure.classes, mask: mH(runs.T30.result, 0.05), alpha: 200 });
     if (R.powder) figs.pw = fig({ values: R.powder.pmax, classes: SLS.raster.RAMPS.powder.classes, mask: (i) => R.powder.pmax[i] >= 0.5, alpha: 190 });
+    const seqFrames = runs[ctx.primaryKey] && runs[ctx.primaryKey].timeline;
+    if (seqFrames && SLS.avTimeline) figs.seq = SLS.avTimeline.sequenceFigure(seqFrames, tr, base, (tt) => `t = ${fmt(tt, 0)} s`);
     if (R.eroded) figs.er = fig({ values: R.eroded, classes: SLS.raster.RAMPS.erosion.classes, mask: (i) => R.eroded[i] >= 0.02, alpha: 200 });
     P(0.65);
     const figNote = fill(T.figNote, { ci, crs: crsDesc ? `${crsDesc.name} (EPSG:${tr.epsg})` : 'EPSG:' + tr.epsg });
@@ -638,6 +644,7 @@
     let fn = 2;
     const FH = 98;
     doc.figure(figs.h, fill(T.figH, { n: fn++ }) + primLabel, figNote, legendItems('height', T), FH);
+    if (figs.seq) doc.figure(figs.seq, fill(T.figSeq, { n: fn++ }) + primLabel, T.seqNote, legendItems('height', T), 120);
     doc.figure(figs.v, fill(T.figV, { n: fn++ }) + primLabel, figNote, legendItems('velocity', T), FH);
     doc.figure(figs.p, fill(T.figP, { n: fn++ }) + primLabel, figNote, legendItems('pressure', T), FH);
     if (figs.p30) doc.figure(figs.p30, fill(T.figP, { n: fn++ }) + ' (T30)', figNote, legendItems('pressure', T), FH);

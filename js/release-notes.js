@@ -4,9 +4,35 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.4.0';
+  SLS.VERSION = '0.5.0';
 
   const RELEASES = [
+    {
+      version: '0.5.0',
+      date: '2026-10-10',
+      tr: {
+        title: 'Simülasyon zaman çizelgesi',
+        items: [
+          'Akış hesap sırasında kaydedilir (senaryo başına ~200 kare, etkin bölge kırpılarak 8 bit kodlanır).',
+          'Zaman çizelgesi: oynat / duraklat, kaydırıcıyla ileri geri gitme, 5×–40× oynatma hızı.',
+          'Akış yüksekliği veya hız görünümü; toz bulutu da oynatılır.',
+          'Anlık en yüksek hız – zaman grafiği; grafiğe tıklayarak o ana atlama.',
+          'T30 / T300 senaryolarının her biri için ayrı zaman çizelgesi.',
+          'Rapora akış zaman dizisi şekli (olay süresinin %10, %30, %60 ve sonu) eklendi.',
+        ],
+      },
+      en: {
+        title: 'Simulation timeline',
+        items: [
+          'The flow is recorded during the computation (~200 frames per scenario, cropped to the active area and 8-bit encoded).',
+          'Timeline: play / pause, scrub back and forth, 5×–40× playback speed.',
+          'Flow height or speed view; the powder cloud is replayed too.',
+          'Current max speed vs time chart; click the chart to jump to that moment.',
+          'A separate timeline for each of the T30 / T300 scenarios.',
+          'The report now includes a flow time-sequence figure (10%, 30%, 60% of the event and the end).',
+        ],
+      },
+    },
     {
       version: '0.4.0',
       date: '2026-10-09',

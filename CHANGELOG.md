@@ -1,5 +1,12 @@
 # Sürüm Notları / Changelog
 
+## 0.5.0 — 2026-10-10 — Simülasyon zaman çizelgesi
+
+- Akış hesap sırasında kaydedilir (senaryo başına ~200 kare, 8 bit, etkin bölge kırpılmış).
+- Oynat / duraklat, ileri-geri kaydırma, 5×–40× hız, yükseklik / hız görünümü, toz bulutu.
+- Anlık en yüksek hız – zaman grafiği; tıklayarak o ana atlama.
+- Raporda akış zaman dizisi şekli.
+
 ## 0.4.0 — 2026-10-09 — Saha platformu, T30 + T300 bölgeleme, sürüklenme, toz bulutu, KML/KMZ
 
 - Tamamlanmamış analiz denetimi: akış sınıra ulaşırsa otomatik alan genişletme ve yeniden hesap (en fazla 3 kez); aksi halde sonuç/rapor/KMZ "tamamlanmamış" olarak işaretlenir.

@@ -471,7 +471,8 @@
             <label class="field"><span>${esc(t('wind.dir'))} (°)</span><input class="input mono" type="number" min="0" max="359" step="1" data-wind="dir" value="${Wd.dir}"></label>
             <label class="field"><span>${esc(t('wind.speed'))} (m/s)</span><input class="input mono" type="number" min="0" max="60" step="0.5" data-wind="speed" value="${Wd.speed}"></label>
           </div>
-          <dl class="kv"><dt>${esc(t('wind.lee'))}</dt><dd>${n(lee)}° · +${n(AN().windDelta(lee, Wd) * 100)} cm</dd></dl>` : ''}
+          <dl class="kv"><dt>${esc(t('wind.lee'))}</dt><dd>${n(lee)}° · ${esc(t('wind.upTo'))} +${n(AN().windAmplitude(Wd) * 100)} cm</dd>
+            ${R.stats && R.stats.wind && R.stats.cells ? `<dt>${esc(t('wind.mean'))}</dt><dd>+${n(R.stats.wind.mean * 100)} cm · ${esc(t('wind.loaded', { p: pct(R.stats.wind.loadedShare) }))}</dd>` : ''}</dl>` : ''}
         <p class="hint">${esc(t('wind.hint'))}</p>
       </section>
 

@@ -13,13 +13,92 @@
   const D2R = Math.PI / 180;
 
   // ---------------------------------------------------------------------------
-  /** Rüzgâr yüklemesi (m, yamaca dik): rüzgâraltı yamaçta artış, rüzgârüstünde yarısı kadar azalma. */
-  function windDelta(aspectDeg, wind) {
-    if (!wind || !wind.on || !(wind.speed > 4) || !Number.isFinite(aspectDeg)) return 0;
-    const k = Math.min(0.5, (wind.speed - 4) * 0.03);       // 10 m/s → 0,18 m; 20 m/s → 0,48 m
+  /**
+   * Rüzgâr yüklemesi — İsviçre kılavuzu (Salm, Burkhard & Gubler 1990; AVAL-1D el kitabı):
+   * kar biriken (Triebschnee) kısımlarda d₀ yaklaşık 0,3–0,5 m artırılır ve hesapta kopma alanının
+   * TAMAMI üzerinden ortalama kullanılır. Buradaki uygulama:
+   *   - Ek büyüklüğü A(U): U < 5 m/s → 0; 5–8 m/s → 0 → 0,3 m; 8–15 m/s → 0,3 → 0,5 m; > 15 m/s → 0,5 m
+   *   - Rüzgâraltı payı: cos(bakı − rüzgâraltı yönü) > 0 olan hücrelerde bu kosinüs (rüzgârüstünde ek yok, azaltma yok)
+   *   - Birikim yeri ağırlığı w ∈ [0, 1]: sırt altındaki üst bant (kopma alanı parçasının üst %15'i → 1, %40'ı → 0)
+   *     veya belirgin oyuk / oluk (yerel topoğrafik konum indeksi TPI −1 m → 0, ≤ −3 m → 1); ikisinden büyüğü
+   *   - Hücre eki = A · rüzgâraltı payı · w
+   * A yalnızca hıza bağlıdır; fırtınanın süresi girilmez — hız günlerce süren taşınmayı temsil etmelidir.
+   */
+  function windAmplitude(wind) {
+    if (!wind || !wind.on || !(wind.speed >= 5)) return 0;
+    const U = wind.speed;
+    if (U < 8) return 0.3 * (U - 5) / 3;
+    if (U < 15) return 0.3 + 0.2 * (U - 8) / 7;
+    return 0.5;
+  }
+  /** Tek hücre için rüzgâraltı payı (0–1) */
+  function leeFactor(aspectDeg, wind) {
+    if (!wind || !Number.isFinite(aspectDeg)) return 0;
     const lee = ((wind.dir || 0) + 180) % 360;              // rüzgârın estiği yön = rüzgâraltı bakı
-    const c = Math.cos((aspectDeg - lee) * D2R);
-    return c > 0 ? k * c : 0.5 * k * c;
+    return Math.max(0, Math.cos((aspectDeg - lee) * D2R));
+  }
+  /** Birikim yerindeki (w = 1) ek (m) */
+  function windDelta(aspectDeg, wind) { return windAmplitude(wind) * leeFactor(aspectDeg, wind); }
+
+  const tpiCache = new WeakMap();
+  /** Yerel topoğrafik konum indeksi (z − ≈ 30 m yarıçaplı pencere ortalaması); arazi başına önbellekli */
+  function tpi(tr) {
+    if (tpiCache.has(tr)) return tpiCache.get(tr);
+    const W = tr.width, H = tr.height, z = tr.data, R = Math.max(2, Math.round(30 / tr.cellSize));
+    const S = new Float64Array((W + 1) * (H + 1)), C = new Float64Array((W + 1) * (H + 1));
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const v = z[r * W + c], ok = Number.isFinite(v), k = (r + 1) * (W + 1) + c + 1;
+      S[k] = (ok ? v : 0) + S[k - 1] + S[k - W - 1] - S[k - W - 2];
+      C[k] = (ok ? 1 : 0) + C[k - 1] + C[k - W - 1] - C[k - W - 2];
+    }
+    const q = (rr, cc) => rr * (W + 1) + cc;
+    const out = new Float32Array(W * H);
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const r0 = Math.max(0, r - R), r1 = Math.min(H, r + R + 1), c0 = Math.max(0, c - R), c1 = Math.min(W, c + R + 1);
+      const sum = S[q(r1, c1)] - S[q(r0, c1)] - S[q(r1, c0)] + S[q(r0, c0)];
+      const cnt = C[q(r1, c1)] - C[q(r0, c1)] - C[q(r1, c0)] + C[q(r0, c0)];
+      out[r * W + c] = cnt ? z[r * W + c] - sum / cnt : 0;
+    }
+    tpiCache.set(tr, out);
+    return out;
+  }
+
+  /** Kopma alanı için hücre bazlı rüzgâr eki haritası (m, yamaca dik) ve özet */
+  function windLoad(ctx, wind) {
+    const tr = ctx.terrain, W = tr.width, H = tr.height, N = W * H, z = tr.data, mask = ctx.mask;
+    const A = windAmplitude(wind);
+    const add = new Float32Array(N);
+    if (!A || !mask) return { add, mean: 0, max: 0, loadedShare: 0, amplitude: A };
+    // Bağlantılı kopma alanı parçaları: üst bant her parçanın kendi kot aralığına göre
+    const comp = new Int32Array(N).fill(-1), zr = [], stack = [];
+    for (let i = 0; i < N; i++) {
+      if (!mask[i] || comp[i] >= 0 || !Number.isFinite(z[i])) continue;
+      const id = zr.length;
+      let lo = Infinity, hi = -Infinity;
+      comp[i] = id; stack.push(i);
+      while (stack.length) {
+        const j = stack.pop(), r = (j / W) | 0, c = j - r * W;
+        if (z[j] < lo) lo = z[j];
+        if (z[j] > hi) hi = z[j];
+        const nb = [c > 0 ? j - 1 : -1, c < W - 1 ? j + 1 : -1, r > 0 ? j - W : -1, r < H - 1 ? j + W : -1];
+        for (const k of nb) if (k >= 0 && mask[k] && comp[k] < 0 && Number.isFinite(z[k])) { comp[k] = id; stack.push(k); }
+      }
+      zr.push([lo, hi]);
+    }
+    const T = tpi(tr);
+    let n = 0, sum = 0, mx = 0, loaded = 0;
+    for (let i = 0; i < N; i++) {
+      if (comp[i] < 0) continue;
+      const lo = zr[comp[i]][0], hi = zr[comp[i]][1];
+      const rel = hi > lo ? (hi - z[i]) / (hi - lo) : 0;                 // 0 = sırt, 1 = alt uç
+      const upper = Math.max(0, Math.min(1, (0.4 - rel) / 0.25));          // üst %15 → 1, %40 → 0
+      const hollow = Math.max(0, Math.min(1, (-T[i] - 1) / 2));            // TPI −1 m → 0, −3 m → 1
+      const v = A * leeFactor(ctx.aspect[i], wind) * Math.max(upper, hollow);
+      add[i] = v; n++; sum += v;
+      if (v > mx) mx = v;
+      if (v >= 0.1) loaded++;
+    }
+    return { add, mean: n ? sum / n : 0, max: mx, loadedShare: n ? loaded / n : 0, amplitude: A };
   }
 
   /** Salm vd. (1990) eğim düzeltmesi f(ψ) = 0,291 / (sin ψ − 0,202 cos ψ); 28°'de 1. */
@@ -40,12 +119,13 @@
     const tr = ctx.terrain, N = tr.width * tr.height, a = tr.cellSize * tr.cellSize;
     const h0 = new Float32Array(N), d = new Float32Array(N);
     let cells = 0, vol = 0, sl = 0, zmin = Infinity, zmax = -Infinity, dmin = Infinity, dmax = -Infinity, dsum = 0;
+    const WL = windLoad(ctx, o.wind);
     for (let i = 0; i < N; i++) {
       if (!ctx.mask[i] || Number.isNaN(tr.data[i])) continue;
       let di = o.d0;
       const zr = o.method === 'swiss' ? (o.zref ?? 2000) : o.elevRef;
       if (zr != null && Number.isFinite(zr) && o.grad) di += o.grad * (tr.data[i] - zr) / 100;
-      di += windDelta(ctx.aspect[i], o.wind);
+      di += WL.add[i];
       if (o.method === 'swiss') di *= fpsi(ctx.slope[i]);
       else if (o.method === 'field') di *= fpsi(ctx.slope[i]) / fpsi(o.refSlope || 28);
       di = Math.max(0.05, di);
@@ -59,7 +139,8 @@
     }
     return {
       h0, d,
-      stats: { cells, area: cells * a, volume: vol, meanSlope: cells ? sl / cells : 0, zmin, zmax, dmin, dmax, dmean: cells ? dsum / cells : 0 },
+      stats: { cells, area: cells * a, volume: vol, meanSlope: cells ? sl / cells : 0, zmin, zmax, dmin, dmax, dmean: cells ? dsum / cells : 0,
+        wind: { mean: WL.mean, max: WL.max, loadedShare: WL.loadedShare, amplitude: WL.amplitude } },
     };
   }
 
@@ -258,5 +339,5 @@
     }).sort((a, b) => b.zone - a.zone || b.pmax - a.pmax);
   }
 
-  SLS.avAnalysis = { AFFECTED_H, windDelta, fpsi, releaseDepth, analyze, flowProfile, zoningMatrix, zoneAreas, singleZone, assetRisk };
+  SLS.avAnalysis = { AFFECTED_H, windDelta, windAmplitude, windLoad, fpsi, releaseDepth, analyze, flowProfile, zoningMatrix, zoneAreas, singleZone, assetRisk };
 })(window.SLS = window.SLS || {});

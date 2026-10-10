@@ -4,9 +4,31 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.8.0';
+  SLS.VERSION = '0.8.1';
 
   const RELEASES = [
+    {
+      version: '0.8.1',
+      date: '2026-10-10',
+      tr: {
+        title: 'Rüzgâr yüklemesi İsviçre kılavuzuna göre düzeltildi',
+        items: [
+          'Rüzgâr eki artık yalnızca kar biriken yerlere uygulanır: rüzgâraltına bakan hücrelerde, sırt altındaki üst bantta ve belirgin oyuklarda (Salm, Burkhard & Gubler 1990: birikim yerlerinde +0,3–0,5 m, kopma alanı ortalaması).',
+          'Önceki sürüm eki tüm rüzgâraltı alana veriyordu: 20 m/s’de kopma alanı ortalaması +0,43 m idi, şimdi +0,18 m (Davos örneği; hacim artışı %43 → %18, etkilenen alan artışı %15 → %8).',
+          'Rüzgârüstü yamaçlarda kalınlık artık azaltılmaz (kılavuzda yok).',
+          'Rüzgâr panelinde ve raporda kopma alanı ortalama eki ve yüklü alan payı gösterilir.',
+        ],
+      },
+      en: {
+        title: 'Wind loading corrected according to the Swiss guideline',
+        items: [
+          'The wind surcharge is now applied only where drift snow accumulates: lee-facing cells in the upper band below the ridge and in pronounced hollows (Salm, Burkhard & Gubler 1990: +0.3–0.5 m at deposits, release-area mean).',
+          'The previous version applied it to the whole lee-facing area: at 20 m/s the release-area mean was +0.43 m, now +0.18 m (Davos example; volume increase 43% → 18%, affected-area increase 15% → 8%).',
+          'Depth is no longer reduced on windward slopes (not part of the guideline).',
+          'The wind panel and the report show the release-area mean surcharge and the loaded area share.',
+        ],
+      },
+    },
     {
       version: '0.8.0',
       date: '2026-10-10',

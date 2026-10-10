@@ -1,5 +1,10 @@
 # Sürüm Notları / Changelog
 
+## 0.8.1 — 2026-10-10 — Rüzgâr yüklemesi İsviçre kılavuzuna göre düzeltildi
+
+- Rüzgâr eki yalnızca birikim yerlerinde (rüzgâraltı + sırt altı üst bant / belirgin oyuk), kopma alanı ortalaması; 20 m/s'de ortalama +0,43 m → +0,18 m.
+- Rüzgârüstünde azaltma kaldırıldı; panelde ve raporda ortalama ek ve yüklü alan payı.
+
 ## 0.8.0 — 2026-10-10 — WebGPU çözücü, doğrulama ve otomatik kalibrasyon, QGIS eklentisi
 
 - WebGPU (WGSL) yoğun akış çözücüsü: dt indirgemesi, durma ölçütü ve kütle muhasebesi GPU'da; CPU ile birebir (5 karşılaştırma testi), 900×600 ızgarada ×16.

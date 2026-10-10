@@ -1,5 +1,14 @@
 # Sürüm Notları / Changelog
 
+## 0.8.0 — 2026-10-10 — WebGPU çözücü, doğrulama ve otomatik kalibrasyon, QGIS eklentisi
+
+- WebGPU (WGSL) yoğun akış çözücüsü: dt indirgemesi, durma ölçütü ve kütle muhasebesi GPU'da; CPU ile birebir (5 karşılaştırma testi), 900×600 ızgarada ×16.
+- Gözlenen çığ sınırına karşı doğrulama (F1, CSI, kesinlik/duyarlık, kaçış, α) ve μ/ξ ölçek çarpanı kalibrasyonu; kalibrasyon setleri.
+- Kalibrasyon ikiz deneyi: 4 vakada çarpanlar %2 içinde geri bulundu.
+- QGIS eklentisi (paket yükleyici + SLS Pro için DEM dışa aktarımı); pakete yeni .qml stilleri.
+- GeoJSON içe aktarımı (gözlenen sınır, orman, varlıklar).
+- Raporda doğrulama/kalibrasyon bölümü, bağlama göre sınırlamalar.
+
 ## 0.7.0 — 2026-10-10 — Açık LiDAR kaynakları, LAS/LAZ, QGIS paketi, GeoTIFF/GeoJSON, paylaşım bağlantısı
 
 - swissALTI3D (İsviçre, 2 m / 0,5 m) ve USGS 3DEP (ABD, 1 m) LiDAR yükseklik kaynakları.

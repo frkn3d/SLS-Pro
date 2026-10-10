@@ -59,8 +59,32 @@
     return feats;
   }
 
+  /** GeoJSON (RFC 7946) → aynı özellik listesi; çokgenlerde dış halka alınır */
+  function parseGeoJSON(text) {
+    const j = JSON.parse(text), feats = [];
+    const list = j.type === 'FeatureCollection' ? j.features : j.type === 'Feature' ? [j] : [{ type: 'Feature', properties: {}, geometry: j }];
+    const open = (ring) => { const c = ring.map((p) => [p[0], p[1]]); if (c.length > 3 && c[0][0] === c[c.length - 1][0] && c[0][1] === c[c.length - 1][1]) c.pop(); return c; };
+    for (const f of list) {
+      const g = f && f.geometry, pr = (f && f.properties) || {};
+      const name = String(pr.name || pr.Name || pr.NAME || pr.id || ''), description = String(pr.description || '');
+      if (!g) continue;
+      const add = (type, coords) => feats.push({ type, coords, name, description });
+      const geoms = g.type === 'GeometryCollection' ? g.geometries : [g];
+      for (const h of geoms) {
+        if (h.type === 'Polygon') add('Polygon', open(h.coordinates[0]));
+        else if (h.type === 'MultiPolygon') h.coordinates.forEach((p) => add('Polygon', open(p[0])));
+        else if (h.type === 'LineString') add('LineString', h.coordinates.map((p) => [p[0], p[1]]));
+        else if (h.type === 'MultiLineString') h.coordinates.forEach((l) => add('LineString', l.map((p) => [p[0], p[1]])));
+        else if (h.type === 'Point') add('Point', [h.coordinates[0], h.coordinates[1]]);
+        else if (h.type === 'MultiPoint') h.coordinates.forEach((p) => add('Point', [p[0], p[1]]));
+      }
+    }
+    return feats;
+  }
+
   async function readFile(file) {
     const lower = file.name.toLowerCase();
+    if (lower.endsWith('.geojson') || lower.endsWith('.json')) return parseGeoJSON(await file.text());
     if (lower.endsWith('.kmz')) {
       const ff = await fflate();
       const files = ff.unzipSync(new Uint8Array(await file.arrayBuffer()));
@@ -136,5 +160,5 @@ ${body}
     return new Blob([ff.zipSync(entries, { level: 6 })], { type: 'application/vnd.google-earth.kmz' });
   }
 
-  SLS.kml = { fflate, parseKml, readFile, bboxOf, kmlColor, polygon, line, point, groundOverlay, folder, kmlDocument, canvasPng, zipKmz };
+  SLS.kml = { fflate, parseKml, parseGeoJSON, readFile, bboxOf, kmlColor, polygon, line, point, groundOverlay, folder, kmlDocument, canvasPng, zipKmz };
 })(window.SLS = window.SLS || {});

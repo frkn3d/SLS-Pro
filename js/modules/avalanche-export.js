@@ -176,27 +176,49 @@ ${items.join('\n')}
   }
 
   /** QGIS vektör stili: bölge kodlarına göre kategorik dolgu */
-  function qmlZonesVector() {
-    const lab = ZONE_LABEL();
-    const cats = [3, 2, 1].map((v, k) => `      <category value="${v}" label="${lab[v]}" symbol="${k}" render="true"/>`).join('\n');
-    const syms = [3, 2, 1].map((v, k) => `      <symbol type="fill" name="${k}" alpha="0.55" clip_to_extent="1" force_rhr="0">
-        <layer class="SimpleFill" enabled="1" locked="0" pass="0">
-          <Option type="Map">
-            <Option name="color" type="QString" value="${rgbOf(ZONE_HEXC[v])},255"/>
-            <Option name="outline_color" type="QString" value="${rgbOf(ZONE_HEXC[v])},255"/>
-            <Option name="outline_width" type="QString" value="0.4"/>
-            <Option name="style" type="QString" value="solid"/>
-          </Option>
-        </layer>
+  /** QGIS sembol katmanı: fill | line | marker */
+  function qmlSymbolLayer(kind, color, alpha) {
+    const c = rgbOf(color) + ',255';
+    if (kind === 'line') return `<layer class="SimpleLine" enabled="1" locked="0" pass="0"><Option type="Map">
+            <Option name="line_color" type="QString" value="${c}"/><Option name="line_width" type="QString" value="0.9"/><Option name="capstyle" type="QString" value="round"/><Option name="joinstyle" type="QString" value="round"/>
+          </Option></layer>`;
+    if (kind === 'marker') return `<layer class="SimpleMarker" enabled="1" locked="0" pass="0"><Option type="Map">
+            <Option name="color" type="QString" value="${c}"/><Option name="outline_color" type="QString" value="11,15,20,255"/><Option name="outline_width" type="QString" value="0.4"/><Option name="size" type="QString" value="3"/><Option name="name" type="QString" value="circle"/>
+          </Option></layer>`;
+    return `<layer class="SimpleFill" enabled="1" locked="0" pass="0"><Option type="Map">
+            <Option name="color" type="QString" value="${alpha === 0 ? rgbOf(color) + ',0' : c}"/><Option name="outline_color" type="QString" value="${c}"/><Option name="outline_width" type="QString" value="0.6"/><Option name="style" type="QString" value="${alpha === 0 ? 'no' : 'solid'}"/>
+          </Option></layer>`;
+  }
+  const QML_HEAD = `<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>\n<qgis version="3.28.0" styleCategories="Symbology">`;
+  const symType = (kind) => (kind === 'marker' ? 'marker' : kind);
+
+  /** QGIS vektör stili: bölge kodlarına göre kategorik (fill / line / marker) */
+  function qmlZonesVector(kind = 'fill', zones = [3, 2, 1]) {
+    const lab = Object.assign({ 0: t('zone.none') }, ZONE_LABEL()), col = Object.assign({ 0: '#94a3b8' }, ZONE_HEXC);
+    const cats = zones.map((v, k) => `      <category value="${v}" label="${lab[v]}" symbol="${k}" render="true"/>`).join('\n');
+    const syms = zones.map((v, k) => `      <symbol type="${symType(kind)}" name="${k}" alpha="${kind === 'fill' ? 0.55 : 1}" clip_to_extent="1" force_rhr="0">
+        ${qmlSymbolLayer(kind, col[v])}
       </symbol>`).join('\n');
-    return `<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis version="3.28.0" styleCategories="Symbology">
+    return `${QML_HEAD}
   <renderer-v2 type="categorizedSymbol" attr="zone" symbollevels="0" enableorderby="0" forceraster="0">
     <categories>
 ${cats}
     </categories>
     <symbols>
 ${syms}
+    </symbols>
+  </renderer-v2>
+</qgis>`;
+  }
+
+  /** QGIS vektör stili: tek sembol */
+  function qmlSingle(kind, color, alpha) {
+    return `${QML_HEAD}
+  <renderer-v2 type="singleSymbol" symbollevels="0" enableorderby="0" forceraster="0">
+    <symbols>
+      <symbol type="${symType(kind)}" name="0" alpha="1" clip_to_extent="1" force_rhr="0">
+        ${qmlSymbolLayer(kind, color, alpha)}
+      </symbol>
     </symbols>
   </renderer-v2>
 </qgis>`;
@@ -244,8 +266,16 @@ ${syms}
     txt('zones.geojson', JSON.stringify(zonesGeoJSON(ctx)));
     txt('zones_poly.qml', qmlZonesVector());
     txt('release.geojson', JSON.stringify(releaseGeoJSON(ctx)));
-    const pg = pathGeoJSON(ctx); if (pg) txt('flow_path.geojson', JSON.stringify(pg));
-    const ag = assetsGeoJSON(ctx); if (ag) txt('assets_risk.geojson', JSON.stringify(ag));
+    txt('release.qml', qmlSingle('fill', '#22d3ee', 0));
+    const pg = pathGeoJSON(ctx); if (pg) { txt('flow_path.geojson', JSON.stringify(pg)); txt('flow_path.qml', qmlSingle('line', '#111827')); }
+    const ag = assetsGeoJSON(ctx);
+    if (ag) {
+      // Karışık geometri: QGIS (eklenti) nokta / çizgi / alan alt katmanlarını ayrı stillerle yükler
+      txt('assets_risk.geojson', JSON.stringify(ag));
+      txt('assets_risk_point.qml', qmlZonesVector('marker', [3, 2, 1, 0]));
+      txt('assets_risk_line.qml', qmlZonesVector('line', [3, 2, 1, 0]));
+      txt('assets_risk_polygon.qml', qmlZonesVector('fill', [3, 2, 1, 0]));
+    }
     const d = SLS.proj.describe(tr.epsg);
     txt('README.txt', [
       `SLS Pro ${SLS.VERSION} — ${ctx.title}`,

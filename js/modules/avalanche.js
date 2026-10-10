@@ -23,6 +23,11 @@
   const PRA = { minSlope: 28, maxSlope: 55, minArea: 2000 };   // potansiyel kopma alanı ölçütleri
   const POLY_SLOPE = { min: 25, max: 60 };                      // elle çizilen alanda kopabilir eğim
   const MAX_EXPANSIONS = 3;                                     // otomatik alan genişletme sınırı
+  // WebGPU: adaptör alınabiliyorsa GPU motoru seçilebilir (sonuç arka planda gelir)
+  let gpuOk = false;
+  if (typeof navigator !== 'undefined' && navigator.gpu) {
+    navigator.gpu.requestAdapter().then((a) => { gpuOk = !!a; if (gpuOk && state && state.step === 'params') render(); }).catch(() => {});
+  }
   const BOUNDARY_TOL = 0.001;                                   // kenardan çıkan hacim / giren hacim
   const COMPASS = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
   const RESULT_LAYERS = [
@@ -80,10 +85,11 @@
         mode: 'single', T: 100, source: 'library', useCalib: true,
         mu: 0.18, xi: 2500, rho: 300, cd: 2, tMax: 300, forest: false,
         entrain: false, erodDepth: 0.3, erodRho: 150, kappaE: 0.02, powder: false,
-        limits: { upper: 1500, lower: 1000 }, order: 2, recordEvery: 0,
+        limits: { upper: 1500, lower: 1000 }, order: 2, recordEvery: 0, engine: 'auto',
       },
       tclass: null, showTclass: false,
       forestPolys: [], drawingForest: false,
+      observed: { rings: [], name: null }, drawingObs: false, calib: freshCalib(),
       colorMode: 'classes',
       project: { id: null, name: '', busy: false, msg: null, err: null },
       landcover: null,
@@ -102,6 +108,11 @@
   function freshRelease() {
     return { polys: [], selected: new Set(), fixedMask: null, d0: 1, d0_30: 1.0, d0_300: 1.5, method: 'direct', zref: 2000, showPra: true, drawingPoly: false, mask: null, h0: null, stats: null };
   }
+  function freshCalib() {
+    return { status: 'idle', all: [], best: null, alternatives: [], cur: null, stop: false, msg: null, error: null, run: null };
+  }
+  const CAL = () => SLS.calibrate;
+
   function freshSim() {
     return {
       status: 'idle', worker: null, live: null, phase: null, runs: {}, primaryKey: null, view: null, layer: 'hmax',
@@ -315,6 +326,8 @@
           ${state.file ? `<span class="fn">${esc(state.file.name)} · ${n(state.file.size / 1048576, 1)} MB</span>` : ''}
         </label>
         <p class="hint">${esc(t('terrain.fileNoExpand'))}</p>
+        <button class="btn block" data-qgisplugin style="margin-top:6px">${ICON.download}<span>${esc(t('exp.qgisPlugin'))}</span></button>
+        <p class="hint">${esc(t('exp.qgisPluginHintDem'))}</p>
       </section>`;
   }
 
@@ -660,6 +673,9 @@
           <button type="button" data-order="2" class="${P.order === 2 ? 'sel' : ''}">${esc(t('par.order2'))}</button>
           <button type="button" data-order="1" class="${P.order === 1 ? 'sel' : ''}">${esc(t('par.order1'))}</button>
         </div>
+        <div class="param-head" style="margin-top:10px"><label>${esc(t('par.engine'))}</label></div>
+        <div class="seg seg-wrap">${['auto', 'cpu', 'gpu'].map((v) => `<button type="button" data-engine="${v}" class="${(P.engine || 'auto') === v ? 'sel' : ''}"${v === 'gpu' && !gpuOk ? ' disabled' : ''}>${esc(t('par.engine.' + v))}</button>`).join('')}</div>
+        <p class="hint">${esc(t(gpuOk ? 'par.engineHint' : 'par.engineNoGpu'))}</p>
         <div class="param-head" style="margin-top:10px"><label>${esc(t('par.record'))}</label></div>
         <div class="seg">${[0, 0.5, 1, 2].map((v) => `<button type="button" data-rec="${v}" class="${P.recordEvery === v ? 'sel' : ''}">${v ? n(v, 1) + ' s' : esc(t('par.auto'))}</button>`).join('')}</div>
         <p class="hint">${esc(t('par.flowHint'))}</p>
@@ -778,7 +794,7 @@
             <dt>${esc(t('res.deposit'))}</dt><dd>${n(A.deposit)} m³</dd>
             <dt>${esc(t('res.outflowShare'))}</dt><dd>${pct(A.outflowShare)}</dd>
             <dt>${esc(t('res.mass'))}</dt><dd>${n(Math.abs(A.massErr) * 100, 4)} %</dd>
-            <dt>${esc(t('res.compute'))}</dt><dd>${n(A.wallMs / 1000, 1)} s · ${n(A.steps)} ${esc(t('res.steps'))}</dd>
+            <dt>${esc(t('res.compute'))}</dt><dd>${n(A.wallMs / 1000, 1)} s · ${n(A.steps)} ${esc(t('res.steps'))} · ${A.engine === 'gpu' ? 'GPU' : 'CPU'}</dd>
           </dl>
           ${A.reason === 'tmax' ? `<div class="alert">${esc(t('res.tmaxWarn'))}</div>` : ''}`}
       </section>
@@ -800,10 +816,12 @@
               <td><span class="zdot" style="background:${ZONE_HEX[a.zone]}"></span>${esc(zoneName(a.zone))}</td><td class="mono">${n(a.pmax)}</td><td class="mono">${n(a.hmax, 1)}</td></tr>`).join('')}
           </tbody></table>` : `<p class="hint">${esc(t('assets.hint'))}</p>`}
       </section>
+      ${validationSection()}
       <section class="section">
         <h4>${esc(t('result.export'))}</h4>
         <div class="stack">
           <button class="btn block" data-exp="qgis">${ICON.download}<span>${esc(t('exp.qgis'))}</span></button>
+          <button class="btn block" data-qgisplugin>${ICON.download}<span>${esc(t('exp.qgisPlugin'))}</span></button>
           <button class="btn block" data-exp="kmz">${ICON.download}<span>${esc(t('exp.kmz'))}</span></button>
           <button class="btn block" data-exp="geojson">${ICON.download}<span>${esc(t('exp.geojson'))}</span></button>
           <button class="btn block" data-exp="tif">${ICON.download}<span>${esc(t('exp.tif'))}</span></button>
@@ -819,6 +837,136 @@
           <button class="btn primary block" data-goto="report">${esc(t('res.report'))} ${ICON.arrow}</button>
         </div>
       </section>`;
+  }
+
+  // ---------- Doğrulama ve kalibrasyon ----------
+  const sgn = (v, d) => (Number.isFinite(v) ? (v >= 0 ? '+' : '−') + n(Math.abs(v), d) : '—');
+  const calibRow = (e) => (e ? { kMu: e.kMu, kXi: e.kXi, J: e.J, f1: e.f1, csi: e.csi, precision: e.precision, recall: e.recall, dAlpha: e.dAlpha, dRunout: e.dRunout, alphaSim: e.alphaSim, alphaObs: e.alphaObs, simHa: e.simHa, obsHa: e.obsHa, outflowShare: e.outflowShare || 0, seed: !!e.seed } : null);
+
+  function observedChanged() {
+    mapView.setObserved(state.observed.rings);
+    state.calib = freshCalib();
+  }
+
+  /** Birincil senaryonun gözleme göre ölçütleri (önbellekli) */
+  function currentMetrics() {
+    const run = primaryRun(), O = state.observed, C = state.calib;
+    if (!run || !O.rings.length || !state.terrain) return null;
+    const key = state.sim.primaryKey + '|' + O.rings.length + '|' + O.rings.map((r) => r.length).join(',') + '|' + state.terrain.originX + '|' + state.terrain.width;
+    if (C.cur && C.cur.key === key && C.cur.result === run.result) return C.cur.m;
+    const obs = CAL().observedMask(state.terrain, O.rings);
+    const m = CAL().metrics(run.result, ctx(), obs);
+    C.cur = { key, m, result: run.result };
+    return m;
+  }
+
+  function validationSection() {
+    const O = state.observed, C = state.calib, has = O.rings.length > 0, run = primaryRun();
+    const m = has && run ? currentMetrics() : null;
+    const verdict = m ? (m.f1 >= 0.8 && Math.abs(m.dAlpha) <= 1 ? 'good' : m.f1 >= 0.6 && Math.abs(m.dAlpha) <= 2 ? 'fair' : 'poor') : null;
+    const busy = C.status === 'running';
+    return `
+      <section class="section" id="valSection">
+        <h4>${esc(t('val.title'))}${Object.keys(state.sim.runs).length > 1 ? ' · ' + esc(state.sim.primaryKey) : ''}</h4>
+        <div class="row">
+          <button class="btn ${state.drawingObs ? 'on' : ''}" id="obsDraw" style="flex:1" ${busy ? 'disabled' : ''}>${ICON.poly}<span>${esc(t(state.drawingObs ? 'rel.finish' : 'val.draw'))}</span></button>
+          ${fileBtn('obsFile', 'val.import', '.kml,.kmz,.geojson,.json')}
+        </div>
+        ${has ? `<div class="row" style="margin:6px 0 2px"><span class="hint" style="flex:1;margin:0">${esc(O.name || '')} · ${esc(t('val.count', { n: O.rings.length, ha: n(m ? m.obsHa : 0, 1) }))}</span><button class="btn" id="obsClear" ${busy ? 'disabled' : ''}>${esc(t('terrain.clear'))}</button></div>`
+          : `<p class="hint">${esc(t('val.hint'))}</p>`}
+        ${m ? `
+          <div class="info-note val-${verdict}" style="margin-top:8px">${esc(t('val.v.' + verdict))}</div>
+          <dl class="kv">
+            <dt>F1 (Dice) / CSI</dt><dd>${n(m.f1, 3)} / ${n(m.csi, 3)}</dd>
+            <dt>${esc(t('val.pr'))}</dt><dd>${n(m.precision, 3)} / ${n(m.recall, 3)}</dd>
+            <dt>${esc(t('val.area'))}</dt><dd>${n(m.simHa, 1)} / ${n(m.obsHa, 1)} / ${n(m.overlapHa, 1)} ha</dd>
+            <dt>${esc(t('val.runout'))}</dt><dd>${n(m.runoutSim)} / ${n(m.runoutObs)} m (${sgn(m.dRunout, 0)})</dd>
+            <dt>${esc(t('val.alpha'))}</dt><dd>${n(m.alphaSim, 1)}° / ${n(m.alphaObs, 1)}° (Δα ${sgn(m.dAlpha, 1)}°)</dd>
+          </dl>` : ''}
+        ${m ? calibBlock() : ''}
+      </section>`;
+  }
+
+  function calibBlock() {
+    const C = state.calib, busy = C.status === 'running';
+    const same = (a, b) => a && b && a.kMu === b.kMu && a.kXi === b.kXi;
+    const rows = C.all.slice().sort((a, b) => a.J - b.J);
+    const table = rows.length ? `
+      <table class="ptable calib-table" style="margin-top:8px">
+        <thead><tr><th>μ ×</th><th>ξ ×</th><th>F1</th><th>Δα</th><th>J</th></tr></thead>
+        <tbody>${rows.map((e) => `<tr class="${same(e, C.best) ? 'best' : ''}"><td class="mono">${n(e.kMu, 3)}${e.seed ? ' <small>' + esc(t('cal.current')) + '</small>' : ''}</td><td>${n(e.kXi, 2)}</td><td>${n(e.f1, 3)}</td><td>${sgn(e.dAlpha, 2)}°</td><td>${n(e.J, 3)}${e.outflowShare > 0.01 ? ' <small title="' + esc(t('cal.flagOutHint')) + '">⚠</small>' : ''}</td></tr>`).join('')}</tbody>
+      </table>` : '';
+    if (busy) {
+      const done = C.all.filter((e) => !e.seed).length, tot = Math.max(done + 1, C.planned || 11);
+      return `
+        <div class="progress" style="margin-top:10px"><div class="track"><div class="fill" style="width:${Math.min(100, done / tot * 100)}%"></div></div></div>
+        <p class="hint">${esc(C.msg || '')}</p>
+        <button class="btn block" id="calStop">${esc(t('cal.stop'))}</button>${table}`;
+    }
+    const B = C.best;
+    return `
+      <div style="margin-top:10px">
+        <button class="btn block" id="calRun">${esc(t(C.all.length ? 'cal.rerun' : 'cal.run'))}</button>
+        <p class="hint">${esc(t('cal.hint'))}</p>
+        ${C.error ? `<div class="alert">${esc(C.error)}</div>` : ''}
+        ${C.msg && !B ? `<div class="info-note">${esc(C.msg)}</div>` : ''}
+        ${B ? `
+          <div class="info-note" style="margin-top:8px"><b>${esc(t('cal.best', { mu: n(B.kMu, 3), xi: n(B.kXi, 2) }))}</b> — F1 ${n(B.f1, 3)}, Δα ${sgn(B.dAlpha, 2)}°${C.stopped ? ' · ' + esc(t('cal.stopped')) : ''}</div>
+          ${C.alternatives.length ? `<p class="hint">${esc(t('cal.alt', { n: C.alternatives.length }))}</p>` : ''}
+          ${same(B, { kMu: 1, kXi: 1 }) ? `<p class="hint">${esc(t('cal.noChange'))}</p>` : `<button class="btn primary block" id="calSave" style="margin-top:6px">${esc(t('cal.save'))}</button>`}` : ''}
+        ${table}
+      </div>`;
+  }
+
+  /** Otomatik kalibrasyon: birincil senaryoda μ/ξ ölçek çarpanı araması (avalanche-calibrate.js) */
+  async function runCalibration() {
+    const S0 = state.sim, run = primaryRun();
+    if (!run || S0.status !== 'done' || !state.observed.rings.length) return;
+    const C = state.calib = Object.assign(freshCalib(), { status: 'running', msg: t('cal.preparing') });
+    render();
+    try {
+      const sc = run.scenario;
+      const rel = AN().releaseDepth(ctx(), releaseOpts(sc.d0));
+      const base = resolveParams(sc.T, rel.stats.volume);
+      const obs = CAL().observedMask(state.terrain, state.observed.rings);
+      const seed = Object.assign(CAL().metrics(run.result, ctx(), obs), { outflowShare: run.analysis.outflowShare });
+      const out = await CAL().search(async (kMu, kXi) => {
+        if (state.sim !== S0) { C.stop = true; return null; }
+        C.msg = t('cal.running', { i: C.all.filter((e) => !e.seed).length + 1, mu: n(kMu, 3), xi: n(kXi, 2) });
+        render();
+        const prm = Object.assign({}, base, { maps: { muMap: base.maps.muMap.map((v) => v * kMu), xiMap: base.maps.xiMap.map((v) => v * kXi) } });
+        const r = await runWorker(rel.h0, prm, false, { quiet: true });
+        if (C.stop || state.sim !== S0) return null;
+        const st = r.result.status, inflow = st.releaseVolume + (st.entrained || 0);
+        return Object.assign(CAL().metrics(r.result, ctx(), obs), { outflowShare: inflow > 0 ? st.outflow / inflow : 0, engine: st.engine });
+      }, { seed, shouldStop: () => C.stop, onStep: (e, all, planned) => { C.all = all.slice(); C.planned = planned; C.best = all.reduce((a, b) => (b.J < a.J ? b : a)); } });
+      if (state.sim !== S0) { state.calib = freshCalib(); return; }
+      if (!out) throw new Error(t('err.generic'));
+      Object.assign(C, { status: 'done', all: out.all, best: out.best, alternatives: out.alternatives, stopped: C.stop, msg: null,
+        run: { key: state.sim.primaryKey, T: sc.T, baseKind: base.kind, baseScale: base.scale || null, baseMu: base.mu, baseXi: base.xi, rho: base.rho, obsName: state.observed.name } });
+    } catch (e) {
+      console.error(e);
+      Object.assign(C, { status: 'idle', error: (e && e.message) || t('err.generic') });
+    }
+    state.sim.worker = null;
+    render();
+  }
+
+  /** En iyi çarpanları kullanıcı kalibrasyon seti olarak kaydeder, uygular ve yeniden hesaplar */
+  function saveCalibration() {
+    const C = state.calib, B = C.best, R = C.run, lib = SLS.paramsLibrary, P = state.params;
+    if (!B || !R) return;
+    const d = new Date(), date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const name = t('cal.setName', { date, obs: R.obsName || t('val.drawn') });
+    const metrics = { f1: B.f1, csi: B.csi, dAlpha: B.dAlpha, dRunout: B.dRunout, kMu: B.kMu, kXi: B.kXi, observed: R.obsName || null, T: R.T };
+    const mk = (T) => (R.baseKind === 'uniform'
+      ? { name, snowType: state.snowType, T, kind: 'uniform', mu: +(R.baseMu * B.kMu).toFixed(4), xi: Math.round(R.baseXi * B.kXi), rho: R.rho, notes: t('cal.notes'), metrics }
+      : { name, snowType: state.snowType, T, kind: 'scale', muScale: +(((R.baseScale && R.baseScale.mu) || 1) * B.kMu).toFixed(4), xiScale: +(((R.baseScale && R.baseScale.xi) || 1) * B.kXi).toFixed(4), rho: R.rho, notes: t('cal.notes'), metrics });
+    let saved;
+    if (P.mode === 'dual') { for (const T of [30, 300]) saved = lib.saveUserSet(mk(T)); P.useCalib = true; }
+    else { saved = lib.saveUserSet(mk(R.T)); P.source = saved.id; }
+    state.calib = Object.assign(freshCalib(), { msg: t('cal.saved', { name: saved.name }) });
+    startSim();
   }
 
   // ---------- Katmanlar ve lejant ----------
@@ -888,6 +1036,7 @@
         html = legendHtml(`${t(L.key)}${L.ramp === 'zones' ? '' : ' (' + ramp.unit + ')'}`, ramp.classes, rangeLabel, true);
       }
       if (S.assetRisk && S.assetRisk.length) html += `<div class="li" style="margin-top:6px"><span class="sw" style="background:#e6edf3;border-radius:50%"></span>${esc(t('assets.title'))}</div>`;
+      if (state.observed.rings.length) html += `<div class="li" style="margin-top:6px"><span class="sw" style="background:transparent;border:2px dashed #c026d3"></span>${esc(t('val.legend'))}</div>`;
     }
     lg.classList.toggle('hidden', !html);
     lg.innerHTML = html;
@@ -1038,6 +1187,7 @@
       if (Number.isFinite(v)) { state.params.limits[inp.dataset.lim] = v; invalidateSim(); render(); }
     });
     sb.querySelectorAll('[data-order]').forEach((b) => b.onclick = () => { state.params.order = Number(b.dataset.order); invalidateSim(); render(); });
+    sb.querySelectorAll('[data-engine]').forEach((b) => b.onclick = () => { state.params.engine = b.dataset.engine; render(); });
     sb.querySelectorAll('[data-rec]').forEach((b) => b.onclick = () => { state.params.recordEvery = Number(b.dataset.rec); invalidateSim(); render(); });
     on('#forestDraw', 'onclick', () => {
       if (state.drawingForest) { mapView.finishPolygon(); return; }
@@ -1082,6 +1232,26 @@
     sb.querySelectorAll('[data-rlayer]').forEach((b) => b.onclick = () => { tlExit(); state.sim.layer = b.dataset.rlayer; paintResult(); render(); });
     sb.querySelectorAll('[data-exp]').forEach((b) => b.onclick = () => exportResult(b.dataset.exp));
     on('#assetFile', 'onchange', (e) => importKml(e.target.files[0], 'assets'));
+    sb.querySelectorAll('[data-qgisplugin]').forEach((b) => b.onclick = async () => {
+      try { SLS.avExport.download(await SLS.qgisPlugin.zip(), `sls_pro_qgis_plugin_${SLS.qgisPlugin.VERSION}.zip`); }
+      catch (e) { console.error(e); hint(t('err.generic')); }
+    });
+    on('#obsFile', 'onchange', (e) => importKml(e.target.files[0], 'observed'));
+    on('#obsDraw', 'onclick', () => {
+      if (state.drawingObs) { mapView.finishPolygon(); return; }
+      state.drawingObs = true;
+      hint(t('rel.polyDrawing'));
+      mapView.startPolygon((ring) => {
+        state.drawingObs = false; hint(null);
+        if (ring) { state.observed.rings.push(ring); state.observed.name = state.observed.name || t('val.drawn'); observedChanged(); }
+        render();
+      });
+      render();
+    });
+    on('#obsClear', 'onclick', () => { state.observed = { rings: [], name: null }; observedChanged(); render(); });
+    on('#calRun', 'onclick', () => runCalibration());
+    on('#calStop', 'onclick', (e) => { state.calib.stop = true; if (state.sim.worker) state.sim.worker.postMessage({ type: 'stop' }); e.currentTarget.disabled = true; });
+    on('#calSave', 'onclick', () => saveCalibration());
     bindProfile(sb);
     bindTimeline(sb);
   }
@@ -1184,6 +1354,11 @@
         state.forestPolys.push(...polys);
         updateForestLayer();
         invalidateSim();
+      } else if (purpose === 'observed') {
+        const polys = feats.filter((f) => f.type === 'Polygon').map((f) => f.coords);
+        if (!polys.length) throw new Error(t('kml.noPolygon'));
+        state.observed = { rings: polys, name: file.name };
+        observedChanged();
       } else if (purpose === 'assets') {
         state.assets = feats;
         state.assetsName = file.name;
@@ -1302,7 +1477,8 @@
   const canExpand = () => !['file', 'lidar'].includes(state.terrain.source.id) && state.sim.expansions < MAX_EXPANSIONS;
 
   /** Tek senaryo çalıştırır. abortOnBoundary: akış alan kenarına ulaşınca erken bırak. */
-  function runWorker(h0, prm, abortOnBoundary) {
+  function runWorker(h0, prm, abortOnBoundary, opts) {
+    const quiet = !!(opts && opts.quiet);   // kalibrasyon koşuları: canlı görüntü ve zaman çizelgesi yok
     return new Promise((resolve, reject) => {
       const tr = state.terrain, P = state.params, W = tr.width, H = tr.height, N = W * H;
       let worker;
@@ -1310,15 +1486,18 @@
       catch (e) { reject(new Error(t('run.workerErr'))); return; }
       state.sim.worker = worker;
       const simCanvas = canvas('sim'), powCanvas = canvas('simPowder');
-      simCanvas.width = W; simCanvas.height = H; powCanvas.width = W; powCanvas.height = H;
-      mapView.setOverlay('sim', simCanvas, state.corners, 0.9);
       const usePowder = P.powder && powderAllowed();
-      if (usePowder) mapView.setOverlay('simPowder', powCanvas, state.corners, 0.55);
-      syncOverlays();
+      if (!quiet) {
+        simCanvas.width = W; simCanvas.height = H; powCanvas.width = W; powCanvas.height = H;
+        mapView.setOverlay('sim', simCanvas, state.corners, 0.9);
+        if (usePowder) mapView.setOverlay('simPowder', powCanvas, state.corners, 0.55);
+        syncOverlays();
+      }
       const heights = SLS.raster.RAMPS.height.classes;
       const cloud = [{ min: 0.5, max: Infinity, color: [196, 160, 255] }];
       worker.onmessage = (e) => {
         const m = e.data;
+        if (m.type === 'frame' && quiet) return;
         if (m.type === 'frame') {
           state.sim.live = Object.assign({}, m.status, { wallMs: m.wallMs });
           SLS.raster.paint(simCanvas, W, H, m.h, heights, 230);
@@ -1345,7 +1524,7 @@
       const muMap = new Float32Array(prm.maps.muMap), xiMap = new Float32Array(prm.maps.xiMap);
       const msg = {
         type: 'start', width: W, height: H, dx: tr.cellSize, z, h0: h0c, muMap, xiMap,
-        params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, cd: P.cd, tMax: P.tMax, kappaE: P.kappaE, rhoCover: P.erodRho, powder: usePowder, order: P.order, recordEvery: P.recordEvery },
+        params: { mu: prm.mu, xi: prm.xi, rho: prm.rho, cd: P.cd, tMax: P.tMax, kappaE: P.kappaE, rhoCover: P.erodRho, powder: usePowder, order: P.order, recordEvery: quiet ? 1e9 : P.recordEvery, engine: gpuOk ? (P.engine || 'auto') : 'cpu' },
       };
       const transfer = [z.buffer, h0c.buffer, muMap.buffer, xiMap.buffer];
       if (P.entrain && P.erodDepth > 0) {
@@ -1396,6 +1575,7 @@
     ['result', 'sim', 'simPowder'].forEach((id) => mapView.removeOverlay(id));
     mapView.setPath(null); mapView.setProbe(null); mapView.setAssets([]);
     const S = state.sim = Object.assign(freshSim(), { status: 'running', layer: state.sim.layer });
+    if (state.calib.status !== 'running') state.calib = Object.assign(freshCalib(), { msg: state.calib.msg });
     state.report.done = null;
     render();
     try {
@@ -1510,6 +1690,7 @@
     return {
       terrain: tr, terrainStats: state.stats, corners: state.corners, runs: S.runs, primaryKey: S.primaryKey,
       zoning: S.zoning, releaseMask: state.release.mask, assetRisk: S.assetRisk,
+      validation: state.observed.rings.length ? { m: currentMetrics(), name: state.observed.name, key: S.primaryKey, calib: state.calib.status === 'done' ? { best: calibRow(state.calib.best), all: state.calib.all.map(calibRow), alternatives: state.calib.alternatives.length } : null } : null,
       pathCoords: pr && pr.profile ? pr.profile.cells.map(cellLonLat) : null,
       mode: P.mode, snowType: state.snowType, complete: !S.incomplete, expansions: S.expansions,
       options: { forest: P.forest, entrain: P.entrain ? { depth_m: P.erodDepth, density: P.erodRho, kappa: P.kappaE } : false, powder: P.powder && powderAllowed(), wind: state.wind.on ? { dir_deg: state.wind.dir, speed_ms: state.wind.speed } : false, cd: P.cd, t_max_s: P.tMax },
@@ -1785,6 +1966,8 @@
       release: { polys: R.polys, d0: R.d0, d0_30: R.d0_30, d0_300: R.d0_300, method: R.method, zref: R.zref },
       field: state.field ? { profile: state.field.profile, useGrad: state.field.useGrad } : null,
       wind: state.wind, snowType: state.snowType, params: state.params, forestPolys: state.forestPolys,
+      observed: state.observed.rings.length ? state.observed : null,
+      calib: state.calib.status === 'done' ? { all: state.calib.all.map(calibRow), best: calibRow(state.calib.best), alternatives: state.calib.alternatives.map(calibRow), run: state.calib.run } : null,
       assets: state.assets, assetsName: state.assetsName, report: state.report.meta, colorMode: state.colorMode,
       sim: S.status === 'done' ? { primaryKey: S.primaryKey, view: S.view, layer: S.layer, expansions: S.expansions, runs } : null,
       step: state.step, basemap: state.basemap,
@@ -1800,6 +1983,10 @@
     applyTerrain(terrain, false);
     Object.assign(state, { wind: json.wind, snowType: json.snowType, forestPolys: json.forestPolys || [], assets: json.assets || [], assetsName: json.assetsName || null, colorMode: json.colorMode || 'classes', basemap: json.basemap || 'topo' });
     state.params = Object.assign(state.params, json.params);
+    state.observed = json.observed || { rings: [], name: null };
+    state.calib = freshCalib();
+    if (json.calib) Object.assign(state.calib, json.calib, { status: 'done' });
+    mapView.setObserved(state.observed.rings);
     state.report.meta = Object.assign(state.report.meta, json.report || {});
     state.field = json.field ? { id: json.field.profile.id, profile: json.field.profile, sim: SLS.snowpack.toSimulation(json.field.profile), useGrad: json.field.useGrad } : null;
     Object.assign(state.release, { polys: json.release.polys || [], d0: json.release.d0, d0_30: json.release.d0_30, d0_300: json.release.d0_300, method: json.release.method || 'direct', zref: json.release.zref || 2000, fixedMask: bins.releaseMask, selected: new Set() });
@@ -2072,6 +2259,7 @@
     _selectPra: (lng, lat) => onMapClick({ lng, lat }),
     _applyProfile: (pr) => applyProfile(pr),
     _importKml: (file, purpose) => importKml(file, purpose),
+    _startSim: () => startSim(),
     _tl: { show: (i) => tlShow(i), play: () => tlPlay(), exit: () => tlExit() },
     _project: { serialize: () => serializeProject(), restore: (b) => restoreProject(b) },
   };

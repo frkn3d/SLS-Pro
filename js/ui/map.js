@@ -40,6 +40,7 @@
             extent: { type: 'geojson', data: EMPTY },
             polys: { type: 'geojson', data: EMPTY },
             fpolys: { type: 'geojson', data: EMPTY },
+            obs: { type: 'geojson', data: EMPTY },
             draft: { type: 'geojson', data: EMPTY },
             path: { type: 'geojson', data: EMPTY },
             probe: { type: 'geojson', data: EMPTY },
@@ -59,6 +60,8 @@
             { id: 'draft-line', type: 'line', source: 'draft', filter: ['==', '$type', 'LineString'], paint: { 'line-color': '#22d3ee', 'line-width': 2, 'line-dasharray': [1.5, 1] } },
             { id: 'path-halo', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 5, 'line-opacity': 0.9 } },
             { id: 'path-line', type: 'line', source: 'path', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#111827', 'line-width': 2.2 } },
+            { id: 'obs-halo', type: 'line', source: 'obs', paint: { 'line-color': '#ffffff', 'line-width': 4.5, 'line-opacity': 0.85 } },
+            { id: 'obs-line', type: 'line', source: 'obs', paint: { 'line-color': '#c026d3', 'line-width': 2.2, 'line-dasharray': [2.5, 1.5] } },
             { id: 'assets-fill', type: 'fill', source: 'assets', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.25 } },
             { id: 'assets-line', type: 'line', source: 'assets', filter: ['!=', '$type', 'Point'], paint: { 'line-color': ['get', 'color'], 'line-width': 3 } },
             { id: 'assets-pt', type: 'circle', source: 'assets', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 6, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#0b0f14', 'circle-stroke-width': 2 } },
@@ -123,6 +126,13 @@
     setOverlayResampling(id, mode) { if (this.map.getLayer(id)) this.map.setPaintProperty(id, 'raster-resampling', mode); }
     setForestPolygons(rings) {
       this.map.getSource('fpolys').setData({
+        type: 'FeatureCollection',
+        features: (rings || []).map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...r, r[0]]] } })),
+      });
+    }
+    /** Gözlenen çığ sınırı (doğrulama) */
+    setObserved(rings) {
+      this.map.getSource('obs').setData({
         type: 'FeatureCollection',
         features: (rings || []).map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...r, r[0]]] } })),
       });

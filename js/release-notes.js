@@ -4,9 +4,37 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.7.0';
+  SLS.VERSION = '0.8.0';
 
   const RELEASES = [
+    {
+      version: '0.8.0',
+      date: '2026-10-10',
+      tr: {
+        title: 'WebGPU çözücü, gözlenen çığa karşı doğrulama ve otomatik kalibrasyon, QGIS eklentisi',
+        items: [
+          'WebGPU (ekran kartı) çözücüsü: yoğun akış ve kar sürüklenmesi tamamen GPU’da; CPU çözücüsüyle aynı sonuç (ayak izi örtüşmesi 1,000, kütle hatası 0). 900×600 ızgarada 16 kat hızlı. Hesap motoru: Otomatik / CPU / GPU; WebGPU yoksa veya toz bulutu açıksa CPU kullanılır.',
+          'Doğrulama: gözlenen çığ sınırı (KML / KMZ / GeoJSON veya haritada çizim) ile karşılaştırma — F1 (Dice), CSI, kesinlik / duyarlık, alanlar, kaçış mesafesi ve α farkı; uyum değerlendirmesi.',
+          'Otomatik kalibrasyon: μ ve ξ haritaları ölçek çarpanlarıyla aranır (her ξ için kaçışı eşleyen μ, ardından şekil uyumu); sonuç kalibrasyon seti olarak kaydedilip tek tıkla uygulanır. μ–ξ eşsonluğu raporlanır.',
+          'İkiz deney doğrulaması: bilinen μ/ξ çarpanlarıyla üretilen izlerden çarpanlar %2 içinde geri bulundu (4 vaka).',
+          'QGIS eklentisi (uygulamadan .zip olarak indirilir): SLS Pro paketini stilleriyle tek grupta açar; QGIS’teki herhangi bir yükseklik katmanını SLS Pro’ya uygun UTM GeoTIFF’e dönüştürür.',
+          'QGIS paketine kopma alanı, akış yolu ve yapı/yol riski (nokta / çizgi / alan) stilleri eklendi.',
+          'Rapor: gözlenen çığa karşı doğrulama ve kalibrasyon bölümü; sınırlamalar kullanılan veri ve yönteme göre yazılır.',
+        ],
+      },
+      en: {
+        title: 'WebGPU solver, validation against observed avalanches and automatic calibration, QGIS plugin',
+        items: [
+          'WebGPU (graphics card) solver: dense flow and entrainment run entirely on the GPU; identical results to the CPU solver (footprint overlap 1.000, mass error 0). 16× faster on a 900×600 grid. Compute engine: Automatic / CPU / GPU; the CPU is used without WebGPU or when the powder cloud is on.',
+          'Validation: comparison with an observed avalanche outline (KML / KMZ / GeoJSON or drawn on the map) — F1 (Dice), CSI, precision / recall, areas, runout distance and α difference; agreement rating.',
+          'Automatic calibration: the μ and ξ maps are searched with scale factors (μ matching the runout for each ξ, then shape agreement); the result is saved as a calibration set and applied with one click. μ–ξ equifinality is reported.',
+          'Twin-experiment validation: factors were recovered within 2% from footprints generated with known μ/ξ factors (4 cases).',
+          'QGIS plugin (downloaded as .zip from the app): opens an SLS Pro package with its styles in one group; converts any elevation layer in QGIS into an SLS Pro-ready UTM GeoTIFF.',
+          'The QGIS package now includes styles for the release area, flow path and building/road risk (point / line / polygon).',
+          'Report: validation and calibration section; limitations are written according to the data and method used.',
+        ],
+      },
+    },
     {
       version: '0.7.0',
       date: '2026-10-10',

@@ -410,3 +410,11 @@ button.step:disabled { cursor: default; opacity: .6; }
 .grad { height: 10px; border-radius: 3px; margin: 2px 0 4px; min-width: 150px; }
 .grad-ticks { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-2); }
 .proj-list li .btn { height: 30px; }
+
+/* Doğrulama / kalibrasyon */
+.info-note.val-good { border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .08); color: #c7f5d6; }
+.info-note.val-fair { border-color: rgba(250, 204, 21, .45); background: rgba(250, 204, 21, .08); color: #fbe9a6; }
+.info-note.val-poor { border-color: rgba(255, 107, 94, .45); background: rgba(255, 107, 94, .08); color: #ffc2bb; }
+.calib-table th { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.calib-table tr.best td { color: var(--text); font-weight: 700; background: rgba(92, 200, 255, .08); }
+.calib-table td small { font-family: var(--font); color: var(--text-3); font-size: 10.5px; }

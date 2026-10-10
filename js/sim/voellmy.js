@@ -72,12 +72,9 @@
     dp: (q) => (q ? (q / 255) * (q / 255) * 100 : 0),
   };
 
-  function createSim(o) {
-    const W = o.width, H = o.height, N = W * H, dx = o.dx, A = dx * dx;
-    const p = Object.assign({}, DEFAULTS, o.params || {});
-    const z = o.z;
-    const muMap = o.muMap || null, xiMap = o.xiMap || null;
-
+  /** Eğim alanları: duvar maskesi, ∂z/∂x, ∂z/∂y, cos²θ, cosθ, g cosθ (CPU ve GPU çözücüleri ortak kullanır) */
+  function geometry(W, H, dx, z) {
+    const N = W * H;
     const wall = new Uint8Array(N);
     for (let i = 0; i < N; i++) if (!Number.isFinite(z[i])) wall[i] = 1;
 
@@ -108,6 +105,16 @@
         cos2[i] = c2; cosT[i] = Math.sqrt(c2); gn[i] = G * Math.sqrt(c2);
       }
     }
+    return { wall, zx, zy, cos2, cosT, gn };
+  }
+
+  function createSim(o) {
+    const W = o.width, H = o.height, N = W * H, dx = o.dx, A = dx * dx;
+    const p = Object.assign({}, DEFAULTS, o.params || {});
+    const z = o.z;
+    const muMap = o.muMap || null, xiMap = o.xiMap || null;
+
+    const { wall, zx, zy, cos2, cosT, gn } = geometry(W, H, dx, z);
 
     // ---- Katmanlar ----
     function layer(withTracer) {
@@ -490,7 +497,7 @@
     };
   }
 
-  const api = { createSim, DEFAULTS, G, QUANT };
+  const api = { createSim, geometry, DEFAULTS, G, QUANT };
   root.SLSVoellmy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

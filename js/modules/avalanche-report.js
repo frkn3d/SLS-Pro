@@ -61,6 +61,9 @@
       recTmax: 'Uyarı: çığ en uzun süre dolduğunda hâlâ hareket ediyordu; süre artırılarak yeniden hesaplanmalıdır.',
       recForestOff: 'Orman örtüsünün sürtünme etkisi bu simülasyonda dikkate alınmamıştır; ormanlık yamaçlarda kaçış mesafesi daha kısa olabilir.',
       s8: '8. Sınırlamalar',
+      limDemHi: 'Yükseklik modeli ({s}) {c} m ızgaraya yeniden örneklenmiştir; ızgara aralığından küçük topoğrafik öğeler (hendek, sedde, yol yarması) temsil edilmeyebilir.',
+      limOrder2: 'İkinci derece sayısal yöntem ızgara bağımlılığını azaltır; yine de sonuçlar ızgara çözünürlüğüne bir ölçüde bağlıdır ve önemli kararlarda daha sık ızgarayla kontrol edilmelidir.',
+      limVal: 'Sonuçlar tek bir gözlenmiş çığa karşı doğrulanmış / kalibre edilmiştir; parametreler başka olaylarla doğrulanmadan bölgenin tamamına genellenmemelidir.',
       lim: [
         'Küresel 30 m yükseklik verisi daha sık ızgaraya yeniden örneklenmiştir; küçük ölçekli topoğrafik öğeler (hendek, sedde, yol yarması) temsil edilmeyebilir. Ayrıntılı çalışmalar için drone veya LiDAR verisi önerilir.',
         'Sürtünme parametreleri literatürdeki tipik aralıklardan alınmıştır ve bölgedeki gözlenmiş çığlarla kalibre edilmemiştir.',
@@ -103,6 +106,8 @@
       s6M: '6. Tehlike bölgelemesi (T30 + T300 matrisi)', figZM: 'Şekil {n} — Şiddet–olasılık matrisine göre tehlike bölgeleri.',
       mxHead: 'Şiddet \\ Olasılık', mxT30: 'T ≤ 30 yıl', mxT300: '30 < T ≤ 300 yıl',
       matrixNote: 'Matris, İsviçre çığ tehlike bölgeleme yaklaşımının şiddet (3 ve 30 kPa) ve olasılık (30 ve 300 yıl) eşiklerini uygular. Toz bulutu basıncı 3 kPa’yı aşan hücrelerde şiddete katılır, 1–3 kPa arası sarı bölge olarak gösterilir. Resmî bölgeleme uzman değerlendirmesi ve yetkili kurum onayı gerektirir.',
+      sVal: 'Gözlenen çığa karşı doğrulama', valDesc: 'Simülasyon ayak izi (h ≥ 0,1 m) gözlenen çığ sınırıyla ({o}, senaryo {k}) karşılaştırılmıştır. F1 (Dice) ve CSI örtüşmeyi, Δα kaçış açısı farkını gösterir (α kopma alanının tepesinden en uzak etkilenen noktaya).', valMetric: 'Ölçüt', valSim: 'Simülasyon', valObs: 'Gözlem', valFit: 'Örtüşme (F1 / CSI)', valPR: 'Kesinlik / duyarlık', valArea: 'Etkilenen alan (ha)', valRunout: 'Kaçış mesafesi (m)', valAlpha: 'α açısı (°)',
+      calDesc: 'Otomatik kalibrasyon: μ ve ξ haritaları ölçek çarpanlarıyla değiştirilmiş, her ξ çarpanı için kaçış mesafesi farkını sıfırlayan μ aranmıştır. Amaç J = (1 − F1) + |Δα|/10°. En iyi: μ ×{mu}, ξ ×{xi} (F1 {f1}, Δα {da}°).', calAlt: 'Benzer uyum veren {n} farklı çarpan çifti bulunmuştur (μ–ξ eşsonluğu); ξ tek olayın ayak izinden güvenilir biçimde belirlenemez.', recVal: 'Gözlenen çığla uyum zayıftır (F1 {f}, Δα {a}°); sonuçlar kalibre edilmeden kullanılmamalıdır.',
       sAssets: 'Yapı ve yol risk tablosu', assetsDesc: 'İçe aktarılan {n} unsurun her biri için {z} ile belirlenen bölge ve en yüksek etkiler.',
       byMatrix: 'T30 + T300 matrisi', bySingle: 'basınç ölçütü',
       aName: 'Unsur', aType: 'Tür', aLen: 'Etkilenen', geom: { Point: 'nokta', LineString: 'yol/hat', Polygon: 'alan' },
@@ -167,6 +172,9 @@
       recTmax: 'Warning: the avalanche was still moving when the maximum duration ended; recompute with a longer duration.',
       recForestOff: 'The friction effect of forest cover was not included in this simulation; runout may be shorter on forested slopes.',
       s8: '8. Limitations',
+      limDemHi: 'The elevation model ({s}) was resampled to a {c} m grid; topographic features smaller than the grid spacing (ditches, dams, road cuts) may not be represented.',
+      limOrder2: 'The second-order numerical scheme reduces grid dependence; results still depend somewhat on grid resolution and should be checked with a finer grid for important decisions.',
+      limVal: 'Results were validated / calibrated against a single observed avalanche; parameters should not be generalised to the whole region without validation against other events.',
       lim: [
         'Global 30 m elevation data were resampled to a finer grid; small topographic features (ditches, dams, road cuts) may not be represented. Drone or LiDAR data are recommended for detailed studies.',
         'Friction parameters are taken from typical literature ranges and have not been calibrated against observed avalanches in the area.',
@@ -209,6 +217,8 @@
       s6M: '6. Hazard zoning (T30 + T300 matrix)', figZM: 'Figure {n} — Hazard zones by the intensity–probability matrix.',
       mxHead: 'Intensity \\ Probability', mxT30: 'T ≤ 30 yr', mxT300: '30 < T ≤ 300 yr',
       matrixNote: 'The matrix applies the intensity (3 and 30 kPa) and probability (30 and 300 years) thresholds of the Swiss avalanche hazard zoning approach. Powder-cloud pressure above 3 kPa adds to intensity; 1–3 kPa is shown as yellow. Official zoning requires expert assessment and approval by the competent authority.',
+      sVal: 'Validation against an observed avalanche', valDesc: 'The simulated footprint (h ≥ 0.1 m) is compared with the observed avalanche outline ({o}, scenario {k}). F1 (Dice) and CSI measure overlap, Δα the runout-angle difference (α from the top of the release area to the farthest affected point).', valMetric: 'Metric', valSim: 'Simulated', valObs: 'Observed', valFit: 'Overlap (F1 / CSI)', valPR: 'Precision / recall', valArea: 'Affected area (ha)', valRunout: 'Runout distance (m)', valAlpha: 'α angle (°)',
+      calDesc: 'Automatic calibration: the μ and ξ maps were scaled by factors; for each ξ factor the μ zeroing the runout-distance difference was searched. Objective J = (1 − F1) + |Δα|/10°. Best: μ ×{mu}, ξ ×{xi} (F1 {f1}, Δα {da}°).', calAlt: '{n} other factor pair(s) give a similar fit (μ–ξ equifinality); ξ cannot be determined reliably from the footprint of a single event.', recVal: 'Agreement with the observed avalanche is poor (F1 {f}, Δα {a}°); results should not be used without calibration.',
       sAssets: 'Building and road risk table', assetsDesc: 'Zone determined by the {z} and peak impacts for each of the {n} imported features.',
       byMatrix: 'T30 + T300 matrix', bySingle: 'pressure criterion',
       aName: 'Feature', aType: 'Type', aLen: 'Affected', geom: { Point: 'point', LineString: 'road/line', Polygon: 'area' },
@@ -618,7 +628,7 @@
       [T.dRange, `${fmt(rel.stats.dmin, 2)} – ${fmt(rel.stats.dmax, 2)} m`],
       [T.frictionMethod, (keys.length ? runs[keys[0]].params.kind : '') === 'maps' ? T.frictionMaps : T.frictionUniform],
       [T.releaseMethod, T.relMethods[(keys.length && runs[keys[0]].params.method) || 'direct']],
-      [T.numMethod, (keys.length && runs[keys[0]].params.order) === 1 ? T.order1 : T.order2],
+      [T.numMethod, ((keys.length && runs[keys[0]].params.order) === 1 ? T.order1 : T.order2) + (keys.length && runs[keys[0]].result && runs[keys[0]].result.status && runs[keys[0]].result.status.engine === 'gpu' ? ' · GPU (WebGPU)' : ' · CPU')],
       [T.windRow, opt.wind ? fill(T.windOn, { dir: fmt(opt.wind.dir_deg), s: fmt(opt.wind.speed_ms, 1) }) : T.notUsed],
       [T.forest, opt.forest && ctx.landcover && ctx.landcover.used ? T.forestOn : T.notUsed],
       [T.entRow, opt.entrain ? fill(T.entOn, { d: fmt(opt.entrain.depth_m, 2), r: fmt(opt.entrain.density), k: fmt(opt.entrain.kappa, 3) }) : T.notUsed],
@@ -721,10 +731,36 @@
       ]), [cw * 0.27, cw * 0.1, cw * 0.13, cw * 0.11, cw * 0.11, cw * 0.12, cw * 0.16], ['l', 'l', 'l', 'r', 'r', 'r', 'r']);
     }
 
+    // Gözlenen çığa karşı doğrulama
+    const VAL = ctx.validation;
+    if (VAL && VAL.m) {
+      const m = VAL.m, cw = doc.cw;
+      doc.space(VAL.calib ? 260 : 150);
+      H1(T.sVal);
+      doc.para(fill(T.valDesc, { o: VAL.name || '—', k: VAL.key || '' }), 9);
+      const sg = (v, d) => (Number.isFinite(v) ? (v >= 0 ? '+' : '−') + fmt(Math.abs(v), d) : '—');
+      doc.table([T.valMetric, T.valSim, T.valObs, 'Δ'], [
+        [T.valFit, fmt(m.f1, 3) + ' / ' + fmt(m.csi, 3), '', ''],
+        [T.valPR, fmt(m.precision, 3) + ' / ' + fmt(m.recall, 3), '', ''],
+        [T.valArea, fmt(m.simHa, 1), fmt(m.obsHa, 1), sg(m.simHa - m.obsHa, 1)],
+        [T.valRunout, fmt(m.runoutSim), fmt(m.runoutObs), sg(m.dRunout, 0)],
+        [T.valAlpha, fmt(m.alphaSim, 1), fmt(m.alphaObs, 1), sg(m.dAlpha, 1)],
+      ], [cw * 0.34, cw * 0.24, cw * 0.2, cw * 0.22], ['l', 'r', 'r', 'r']);
+      if (VAL.calib && VAL.calib.best) {
+        const B = VAL.calib.best;
+        doc.para(fill(T.calDesc, { mu: fmt(B.kMu, 3), xi: fmt(B.kXi, 2), f1: fmt(B.f1, 3), da: sg(B.dAlpha, 2) }), 9);
+        doc.table(['μ ×', 'ξ ×', 'F1', 'CSI', 'Δα (°)', 'J'], VAL.calib.all.slice().sort((a, b) => a.J - b.J).map((e) => [
+          fmt(e.kMu, 3), fmt(e.kXi, 2), fmt(e.f1, 3), fmt(e.csi, 3), sg(e.dAlpha, 2), fmt(e.J, 3),
+        ]), [cw * 0.16, cw * 0.14, cw * 0.16, cw * 0.16, cw * 0.2, cw * 0.18], ['r', 'r', 'r', 'r', 'r', 'r']);
+        if (VAL.calib.alternatives) doc.para(fill(T.calAlt, { n: VAL.calib.alternatives }), 8.4, C.ink2);
+      }
+    }
+
     // Değerlendirme
     H1(T.s7);
     const recs = [];
     if (!ctx.complete) recs.push(fill(T.recIncomplete, { r: ctx.incompleteReason || '' }));
+    if (VAL && VAL.m && (VAL.m.f1 < 0.6 || Math.abs(VAL.m.dAlpha) > 2)) recs.push(fill(T.recVal, { f: fmt(VAL.m.f1, 2), a: fmt(VAL.m.dAlpha, 1) }));
     const zR = dual ? zA.red : A.zoneHa[2], zB = dual ? zA.blue : A.zoneHa[1], zY = dual ? zA.yellow : A.zoneHa[0];
     if (zR > 0) recs.push(fill(T.recRed, { a: fmt(zR, 1) }));
     if (zB > 0) recs.push(fill(T.recBlue, { a: fmt(zB, 1) }));
@@ -752,7 +788,12 @@
 
     // Sınırlamalar
     H1(T.s8);
-    doc.bullets(T.lim, 8.8);
+    const lim = T.lim.slice();
+    const srcId = tr.source && tr.source.id;
+    if (srcId && !['copernicus', 'terrarium'].includes(srcId)) lim[0] = fill(T.limDemHi, { s: { swissalti3d: 'swissALTI3D', usgs3dep: 'USGS 3DEP', lidar: 'LiDAR LAS/LAZ', file: 'GeoTIFF' }[srcId] || srcId, c: fmt(tr.cellSize) });
+    if (ctx.validation && ctx.validation.m) lim[1] = T.limVal;
+    if (!(keys.length && runs[keys[0]].params.order === 1)) lim[4] = T.limOrder2;
+    doc.bullets(lim, 8.8);
 
     // Kaynaklar
     H1(T.s9);

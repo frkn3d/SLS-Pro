@@ -99,7 +99,7 @@
       deposit: st.depositVolume, outflow: st.outflow, outflowShare, edges: st.edges,
       toPowder: st.toPowderVol || 0, powderPmax: ppow, powderHa: powderHa * ha, powder: st.powder,
       massErr: (inflow + st.clipped - st.depositVolume - st.outflow - (st.toPowderVol || 0)) / st.releaseVolume,
-      t: st.t, steps: st.steps, wallMs: st.wallMs, reason: st.reason,
+      t: st.t, steps: st.steps, wallMs: st.wallMs, reason: st.reason, engine: st.engine || 'cpu',
       complete: outflowShare <= 0.001 && st.reason !== 'tmax' && st.reason !== 'user',
     };
   }

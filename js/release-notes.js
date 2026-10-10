@@ -4,9 +4,27 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.8.1';
+  SLS.VERSION = '0.8.2';
 
   const RELEASES = [
+    {
+      version: '0.8.2',
+      date: '2026-10-10',
+      tr: {
+        title: 'swissALTI3D / USGS 3DEP: kapsam denetimi ve yeniden deneme',
+        items: [
+          'Seçilen alan kaynağın kapsamı dışındaysa (swissALTI3D: İsviçre ve Lihtenştayn; USGS 3DEP: ABD) kart “Kapsam dışı” olarak işaretlenir ve nedeni ile önerilen kaynaklar yazılır.',
+          'USGS 3DEP sunucusu yoğunlukta zaman zaman yanıt vermiyor ve tarayıcı bunu “Failed to fetch” olarak bildiriyordu. İstekler artık zaman aşımıyla 4 kez (swisstopo: 3 kez) artan beklemeyle yeniden denenir; yine olmazsa anlaşılır bir mesaj gösterilir.',
+        ],
+      },
+      en: {
+        title: 'swissALTI3D / USGS 3DEP: coverage check and retries',
+        items: [
+          'If the selected area is outside a source’s coverage (swissALTI3D: Switzerland and Liechtenstein; USGS 3DEP: USA) the card is marked “Outside coverage” with the reason and suggested sources.',
+          'The USGS 3DEP server occasionally stops responding under load, which the browser reported as “Failed to fetch”. Requests are now retried 4 times (swisstopo: 3) with increasing waits and a timeout; otherwise a clear message is shown.',
+        ],
+      },
+    },
     {
       version: '0.8.1',
       date: '2026-10-10',

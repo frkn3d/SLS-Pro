@@ -1,5 +1,10 @@
 # Sürüm Notları / Changelog
 
+## 0.8.2 — 2026-10-10 — swissALTI3D / USGS 3DEP: kapsam denetimi ve yeniden deneme
+
+- Kapsam dışı alanda kartlar işaretlenir, getirme engellenir, neden ve alternatif kaynaklar gösterilir.
+- USGS 3DEP ve swisstopo istekleri zaman aşımıyla yeniden denenir (aralıklı sunucu yanıtsızlığı canlı sitede "Failed to fetch" hatasına yol açıyordu).
+
 ## 0.8.1 — 2026-10-10 — Rüzgâr yüklemesi İsviçre kılavuzuna göre düzeltildi
 
 - Rüzgâr eki yalnızca birikim yerlerinde (rüzgâraltı + sırt altı üst bant / belirgin oyuk), kopma alanı ortalaması; 20 m/s'de ortalama +0,43 m → +0,18 m.

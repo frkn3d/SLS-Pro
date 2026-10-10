@@ -242,7 +242,10 @@
 
   function terrainPanel() {
     const plan = gridPlan();
-    const canFetch = !state.busy && (state.source === 'file' || state.source === 'lidar' ? !!state.file : !!state.bbox && plan && !plan.tooBig);
+    const cov = (id) => SLS.sources.covers(id, state.bbox);
+    const outside = !!state.bbox && !cov(state.source);
+    const canFetch = !state.busy && (state.source === 'file' || state.source === 'lidar' ? !!state.file : !!state.bbox && plan && !plan.tooBig && !outside);
+    const covTag = (id, label) => (state.bbox && !cov(id) ? `<span class="tag warn">${esc(t('src.outsideTag'))}</span>` : `<span class="tag ok">${label}</span>`);
     return `
       <section class="section">
         <h2>${esc(t('terrain.title'))}</h2>
@@ -253,8 +256,8 @@
         <div class="src-list">
           ${sourceCard('terrarium', '<span class="tag ok">' + esc(t('src.browser')) + '</span>')}
           ${sourceCard('copernicus', state.serverOk ? '<span class="tag ok">serve.py ✓</span>' : '<span class="tag warn">' + esc(t('src.needsServer')) + '</span>', !state.serverOk)}
-          ${sourceCard('swissalti3d', '<span class="tag ok">LiDAR 2 m · CH</span>')}
-          ${sourceCard('usgs3dep', '<span class="tag ok">LiDAR 1 m · US</span>')}
+          ${sourceCard('swissalti3d', covTag('swissalti3d', 'LiDAR 2 m · CH'), !cov('swissalti3d'))}
+          ${sourceCard('usgs3dep', covTag('usgs3dep', 'LiDAR 1 m · US'), !cov('usgs3dep'))}
           ${sourceCard('file', '<span class="tag">' + esc(t('src.local')) + '</span>')}
           ${sourceCard('lidar', '<span class="tag">LAS / LAZ</span>')}
         </div>
@@ -276,6 +279,7 @@
         </div>
         ${state.error ? `<div class="alert">${esc(state.error)}</div>` : ''}
         ${plan && plan.tooBig ? `<div class="alert">${esc(t('terrain.tooBig'))}</div>` : ''}
+        ${outside ? `<div class="alert">${esc(t('src.outside', { name: t('src.' + state.source), area: t('src.area.' + state.source) }))}</div>` : ''}
       </section>
       ${state.terrain ? terrainResult() : ''}`;
   }

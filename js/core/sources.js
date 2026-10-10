@@ -52,6 +52,46 @@
     },
   };
 
+  // Kapsam kutuları (WGS84 [batı, güney, doğu, kuzey]); seçilen alanın merkezi bunlardan birinde olmalı
+  const COVERAGE = {
+    swissalti3d: [[5.95, 45.81, 10.50, 47.81]],                               // İsviçre + Lihtenştayn
+    usgs3dep: [[-125.0, 24.4, -66.9, 49.5], [-180.0, 51.0, -129.0, 71.5],    // ABD kıta, Alaska
+      [-160.3, 18.9, -154.7, 22.3], [-67.3, 17.9, -65.2, 18.6]],              // Hawaii, Porto Riko
+  };
+  /** Kaynak bu alanı kapsıyor mu? (kapsam tanımı olmayan kaynaklar için her zaman true) */
+  function covers(id, bbox) {
+    const boxes = COVERAGE[id];
+    if (!boxes || !bbox) return true;
+    const x = (bbox.west + bbox.east) / 2, y = (bbox.south + bbox.north) / 2;
+    return boxes.some(([w, s, e, n]) => x >= w && x <= e && y >= s && y <= n);
+  }
+
+  /**
+   * Yeniden denemeli istek: ağ hatası, zaman aşımı, 429 ve 5xx yanıtlarında artan beklemeyle tekrar dener.
+   * Yoğun kamu sunucuları (ör. USGS) zaman aşımında CORS başlığı olmayan bir hata döndürür; tarayıcı bunu
+   * "Failed to fetch" olarak bildirir — bu da geçici kabul edilir.
+   */
+  async function fetchRetry(url, name, opts) {
+    const o = Object.assign({ tries: 3, timeout: 60000, waits: [2000, 6000] }, opts || {});
+    let last = null;
+    for (let k = 0; k < o.tries; k++) {
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), o.timeout) : null;
+      try {
+        const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+        if (r.ok) return r;
+        if (r.status !== 429 && r.status < 500) throw Object.assign(new Error(name + ' ' + r.status), { fatal: true });
+        last = new Error(name + ' ' + r.status);
+      } catch (e) {
+        if (e && e.fatal) throw e;
+        last = e;
+      } finally { if (timer) clearTimeout(timer); }
+      if (k < o.tries - 1) await new Promise((res) => setTimeout(res, o.waits[Math.min(k, o.waits.length - 1)]));
+    }
+    console.warn(name, last);
+    throw new Error(SLS.i18n.t('src.serverBusy', { name, n: o.tries }));
+  }
+
   async function pool(items, limit, worker) {
     let next = 0;
     const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
@@ -247,6 +287,7 @@
   const SWISS_STAC = 'https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swissalti3d/items';
 
   async function fromSwissAlti3d(bbox, cellSize, onProgress, epsg) {
+    if (!covers('swissalti3d', bbox)) throw new Error(SLS.i18n.t('src.outside', { name: 'swissALTI3D', area: SLS.i18n.t('src.area.swissalti3d') }));
     const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
     if (grid.tooBig) throw new Error(SLS.i18n.t('terrain.tooBig'));
     const gsd = cellSize < 2 ? 0.5 : 2;
@@ -255,8 +296,7 @@
     let url = `${SWISS_STAC}?bbox=${bbox.west - pad},${bbox.south - pad},${bbox.east + pad},${bbox.north + pad}&limit=100`;
     const tiles = new Map();
     for (let guard = 0; url && guard < 50; guard++) {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('STAC ' + r.status);
+      const r = await fetchRetry(url, 'swisstopo');
       const j = await r.json();
       for (const f of j.features || []) {
         const m = f.id.match(/swissalti3d_(\d{4})_(\d{4}-\d{4})/);
@@ -306,6 +346,7 @@
   const USGS_IS = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage';
 
   async function fromUsgs3dep(bbox, cellSize, onProgress, epsg) {
+    if (!covers('usgs3dep', bbox)) throw new Error(SLS.i18n.t('src.outside', { name: 'USGS 3DEP', area: SLS.i18n.t('src.area.usgs3dep') }));
     const grid = SLS.terrain.planGrid(bbox, cellSize, epsg);
     if (grid.tooBig) throw new Error(SLS.i18n.t('terrain.tooBig'));
     const W = grid.width, H = grid.height, cs = grid.cellSize, data = new Float32Array(W * H).fill(NaN);
@@ -316,8 +357,7 @@
     await pool(jobs, 3, async ([r0, c0, h, w]) => {
       const x0 = grid.originX + c0 * cs, y1 = grid.originY - r0 * cs, x1 = x0 + w * cs, y0 = y1 - h * cs;
       const q = new URLSearchParams({ bbox: `${x0},${y0},${x1},${y1}`, bboxSR: grid.epsg, imageSR: grid.epsg, size: `${w},${h}`, format: 'tiff', pixelType: 'F32', noDataInterpretation: 'esriNoDataMatchAny', interpolation: 'RSP_BilinearInterpolation', f: 'image' });
-      const r = await fetch(`${USGS_IS}?${q}`);
-      if (!r.ok) throw new Error('3DEP ' + r.status);
+      const r = await fetchRetry(`${USGS_IS}?${q}`, 'USGS 3DEP', { tries: 4, waits: [2000, 6000, 15000] });
       const tiff = await GeoTIFF.fromArrayBuffer(await r.arrayBuffer());
       const img = await tiff.getImage();
       const [band] = await img.readRasters();
@@ -348,5 +388,5 @@
     return t;
   }
 
-  SLS.sources = { SOURCES, fromTerrarium, fromCopernicus, fromFile, fromSwissAlti3d, fromUsgs3dep, finish, serverAvailable, TERRARIUM_URL };
+  SLS.sources = { SOURCES, fromTerrarium, fromCopernicus, fromFile, fromSwissAlti3d, fromUsgs3dep, finish, serverAvailable, TERRARIUM_URL, covers, COVERAGE, fetchRetry };
 })(window.SLS = window.SLS || {});

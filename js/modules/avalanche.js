@@ -1487,7 +1487,7 @@
     return new Promise((resolve, reject) => {
       const tr = state.terrain, P = state.params, W = tr.width, H = tr.height, N = W * H;
       let worker;
-      try { worker = new Worker('js/sim/voellmy-worker.js'); }
+      try { worker = new Worker('js/sim/voellmy-worker.js?v=' + encodeURIComponent(SLS.VERSION)); }   // sürüm anahtarı: önbellekte eski çözücü kalmasın
       catch (e) { reject(new Error(t('run.workerErr'))); return; }
       state.sim.worker = worker;
       const simCanvas = canvas('sim'), powCanvas = canvas('simPowder');
@@ -2265,6 +2265,7 @@
     _applyProfile: (pr) => applyProfile(pr),
     _importKml: (file, purpose) => importKml(file, purpose),
     _startSim: () => startSim(),
+    _setReleaseMask: (m) => { const R = state.release; R.polys = []; R.selected.clear(); R.fixedMask = m; updateRelease(); },
     _tl: { show: (i) => tlShow(i), play: () => tlPlay(), exit: () => tlExit() },
     _project: { serialize: () => serializeProject(), restore: (b) => restoreProject(b) },
   };

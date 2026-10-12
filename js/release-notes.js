@@ -4,9 +4,33 @@
 (function (SLS) {
   'use strict';
 
-  SLS.VERSION = '0.8.2';
+  SLS.VERSION = '0.8.3';
 
   const RELEASES = [
+    {
+      version: '0.8.3',
+      date: '2026-10-12',
+      tr: {
+        title: 'Gerçek çığ olaylarıyla doğruluk analizi, iki hata düzeltmesi',
+        items: [
+          'Doğruluk analizi: 24 Ocak 2018 İsviçre çığ döneminde uydudan haritalanmış 22 levha çığı (Hafner & Bühler 2019, EnviDat, ODbL) swissALTI3D 5 m arazide kalibrasyonsuz yeniden hesaplandı. Medyan F1 0,59; α farkı ortalaması −0,5°, RMSE 3,3° (istatistiksel temel modelde 5,6° — beceri 0,41); vakaların %45’inde |Δα| ≤ 2°. Simülasyon ayak izi gözlenenden ortalama 1,7 kat geniş.',
+          'Çapraz doğrulamalı kalibrasyon (her vaka diğer 21 vakayla): ortak μ ×1,12 seçildi; F1 0,64, vakaların %64’ünde |Δα| ≤ 2°. Rapordaki sınırlamalar bölümü bu sonuçları içerir.',
+          'Düzeltme: aynı anda kaydedilen kalibrasyon setleri aynı kimliği alıp birbirinin üzerine yazıyordu (ikili senaryo kalibrasyonunda T30 seti kayboluyordu).',
+          'Düzeltme: gözlenen çığ sınırı yükseklik verisi olmayan hücrelere taştığında α hesaplanamıyordu.',
+          'Yeni sürümden sonra tarayıcı önbelleğinde eski dosyaların kalmaması için tüm uygulama dosyaları sürüm anahtarıyla yüklenir.',
+        ],
+      },
+      en: {
+        title: 'Accuracy analysis against real avalanches, two bug fixes',
+        items: [
+          'Accuracy analysis: 22 satellite-mapped slab avalanches from the 24 January 2018 Swiss avalanche period (Hafner & Bühler 2019, EnviDat, ODbL) were recomputed without calibration on swissALTI3D 5 m terrain. Median F1 0.59; mean α difference −0.5°, RMSE 3.3° (5.6° for a statistical baseline — skill 0.41); |Δα| ≤ 2° in 45% of cases. The simulated footprint is on average 1.7 times wider than observed.',
+          'Cross-validated calibration (each case with the other 21): common μ ×1.12 selected; F1 0.64, |Δα| ≤ 2° in 64% of cases. The report’s limitations section includes these results.',
+          'Fix: calibration sets saved at the same moment got the same id and overwrote each other (the T30 set was lost in dual-scenario calibration).',
+          'Fix: α could not be computed when the observed outline extended into cells without elevation data.',
+          'All application files are loaded with a version key so that old files do not remain in the browser cache after a release.',
+        ],
+      },
+    },
     {
       version: '0.8.2',
       date: '2026-10-10',

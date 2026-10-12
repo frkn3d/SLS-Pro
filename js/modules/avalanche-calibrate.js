@@ -62,8 +62,9 @@
     const ha = cs * cs / 10000;
     const precision = tp + fp ? tp / (tp + fp) : 0, recall = tp + fn ? tp / (tp + fn) : 0;
     const f1 = tp ? 2 * tp / (2 * tp + fp + fn) : 0, csi = tp ? tp / (tp + fp + fn) : 0;
-    const sim = tipFrom(obs, W, iTop, (i) => res.hmax[i] >= AFFECTED_H);
-    const ob = tipFrom(obs, W, iTop, (i) => obs[i] === 1);
+    // Uç noktaları yalnızca yüksekliği bilinen hücrelerden (veri boşluğunda α hesaplanamaz)
+    const sim = tipFrom(obs, W, iTop, (i) => res.hmax[i] >= AFFECTED_H && Number.isFinite(z[i]));
+    const ob = tipFrom(obs, W, iTop, (i) => obs[i] === 1 && Number.isFinite(z[i]));
     const alpha = (t) => (t.iTip >= 0 && t.dist > 0 ? Math.atan((z[iTop] - z[t.iTip]) / (t.dist * cs)) * R2D : NaN);
     const aS = alpha(sim), aO = alpha(ob);
     return {

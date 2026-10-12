@@ -148,7 +148,8 @@
   }
   function saveUserSet(set) {
     const a = userSets().filter((x) => x.id !== set.id);
-    a.unshift(Object.assign({ id: 'u' + Date.now().toString(36), created: new Date().toISOString(), kind: 'uniform' }, set));
+    // Kimlik: zaman + rastgele ek (aynı milisaniyede kaydedilen setler çakışmasın; ör. ikili senaryo kalibrasyonu)
+    a.unshift(Object.assign({ id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), created: new Date().toISOString(), kind: 'uniform' }, set));
     try { localStorage.setItem(USER_STORE, JSON.stringify(a)); } catch (_) { /* yok say */ }
     return a[0];
   }

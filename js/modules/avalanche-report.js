@@ -63,6 +63,7 @@
       s8: '8. Sınırlamalar',
       limDemHi: 'Yükseklik modeli ({s}) {c} m ızgaraya yeniden örneklenmiştir; ızgara aralığından küçük topoğrafik öğeler (hendek, sedde, yol yarması) temsil edilmeyebilir.',
       limOrder2: 'İkinci derece sayısal yöntem ızgara bağımlılığını azaltır; yine de sonuçlar ızgara çözünürlüğüne bir ölçüde bağlıdır ve önemli kararlarda daha sık ızgarayla kontrol edilmelidir.',
+      limHindcast: 'Gerçek olay doğrulaması (SLS Pro 0.8.3): 24 Ocak 2018 İsviçre çığ döneminden uydu ile haritalanmış 22 levha çığında kalibrasyonsuz geriye-tahmin — medyan F1 0,59, α farkı ortalaması −0,5° (RMSE 3,3°), vakaların %45’inde |Δα| ≤ 2°, medyan kaçış farkı 152 m; simülasyon ayak izi gözlenenden ortalama 1,7 kat geniştir (kopma alanı ve kalınlığı gözlemden tahmin edilmiştir). Sonuçlar bu belirsizlik düzeyinde yorumlanmalıdır.',
       limVal: 'Sonuçlar tek bir gözlenmiş çığa karşı doğrulanmış / kalibre edilmiştir; parametreler başka olaylarla doğrulanmadan bölgenin tamamına genellenmemelidir.',
       lim: [
         'Küresel 30 m yükseklik verisi daha sık ızgaraya yeniden örneklenmiştir; küçük ölçekli topoğrafik öğeler (hendek, sedde, yol yarması) temsil edilmeyebilir. Ayrıntılı çalışmalar için drone veya LiDAR verisi önerilir.',
@@ -174,6 +175,7 @@
       s8: '8. Limitations',
       limDemHi: 'The elevation model ({s}) was resampled to a {c} m grid; topographic features smaller than the grid spacing (ditches, dams, road cuts) may not be represented.',
       limOrder2: 'The second-order numerical scheme reduces grid dependence; results still depend somewhat on grid resolution and should be checked with a finer grid for important decisions.',
+      limHindcast: 'Real-event validation (SLS Pro 0.8.3): uncalibrated hindcast of 22 satellite-mapped slab avalanches from the 24 January 2018 Swiss avalanche period — median F1 0.59, mean α difference −0.5° (RMSE 3.3°), |Δα| ≤ 2° in 45% of cases, median runout difference 152 m; the simulated footprint is on average 1.7 times wider than observed (release area and depth estimated from the observations). Results should be interpreted at this level of uncertainty.',
       limVal: 'Results were validated / calibrated against a single observed avalanche; parameters should not be generalised to the whole region without validation against other events.',
       lim: [
         'Global 30 m elevation data were resampled to a finer grid; small topographic features (ditches, dams, road cuts) may not be represented. Drone or LiDAR data are recommended for detailed studies.',
@@ -793,6 +795,7 @@
     if (srcId && !['copernicus', 'terrarium'].includes(srcId)) lim[0] = fill(T.limDemHi, { s: { swissalti3d: 'swissALTI3D', usgs3dep: 'USGS 3DEP', lidar: 'LiDAR LAS/LAZ', file: 'GeoTIFF' }[srcId] || srcId, c: fmt(tr.cellSize) });
     if (ctx.validation && ctx.validation.m) lim[1] = T.limVal;
     if (!(keys.length && runs[keys[0]].params.order === 1)) lim[4] = T.limOrder2;
+    lim.splice(lim.length - 1, 0, T.limHindcast);
     doc.bullets(lim, 8.8);
 
     // Kaynaklar

@@ -4,7 +4,8 @@
  * ~7–10 kare/sn akış yüksekliği görüntüsü ana iş parçacığına gönderilir.
  */
 /* global SLSVoellmy, SLSVoellmyGPU */
-importScripts('voellmy.js', 'voellmy-gpu.js');
+const VQ = self.location.search;   // ?v=sürüm (ana sayfadan): içe aktarılan dosyalar da aynı sürümle istenir
+importScripts('voellmy.js' + VQ, 'voellmy-gpu.js' + VQ);
 
 const GPU_AUTO_CELLS = 60000;   // otomatik kipte GPU'nun seçildiği en küçük ızgara
 

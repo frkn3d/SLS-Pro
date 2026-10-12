@@ -1,5 +1,11 @@
 # Sürüm Notları / Changelog
 
+## 0.8.3 — 2026-10-12 — Gerçek çığ olaylarıyla doğruluk analizi, iki hata düzeltmesi
+
+- SPOT6 2018 (22 vaka) kör geriye-tahmin: medyan F1 0,59, Δα RMSE 3,3° (temel model 5,6°), %45 |Δα| ≤ 2°; LOO kalibrasyon (μ ×1,12): F1 0,64, %64.
+- Düzeltme: kalibrasyon seti kimlik çakışması; NaN hücrede gözlenen uç (α).
+- Dosyalar sürüm anahtarıyla yüklenir (önbellek).
+
 ## 0.8.2 — 2026-10-10 — swissALTI3D / USGS 3DEP: kapsam denetimi ve yeniden deneme
 
 - Kapsam dışı alanda kartlar işaretlenir, getirme engellenir, neden ve alternatif kaynaklar gösterilir.
